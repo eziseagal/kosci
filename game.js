@@ -251,8 +251,8 @@ function startGry() {
    TURA
 ======================= */
 function aktualizujTure() {
-  document.getElementById("tura").innerText =
-    `Tura: ${nazwyGraczy[aktywnyGracz]}`;
+  const nazwa = nazwyGraczy[aktywnyGracz] || `Gracz ${aktywnyGracz + 1}`;
+  document.getElementById("tura").innerText = `Tura: ${nazwa}`;
 
   document.querySelectorAll("td").forEach(td => {
     td.classList.remove("aktywny-gracz");
@@ -417,10 +417,16 @@ function undoLast() {
   if (undoStack.length === 0) return;
   const snap = undoStack.pop();
   // Przywróć wartości pola
-  const { cell, oldText, oldLocked, prevGenerałLicznik, prevGenerałWynik, prevActiveGracz, gracz } = snap;
+  const { cell, oldText, oldLocked, prevGenerałLicznik, prevGenerałWynik, prevActiveGracz, gracz, clearCellToEmpty } = snap;
   if (cell) {
-    cell.innerText = oldText;
-    if (oldLocked) cell.classList.add('zablokowane'); else cell.classList.remove('zablokowane');
+    // Jeśli snapshot wymusza wyczyszczenie pola (np. cofamy "zwykłego" generala), ustaw puste
+    if (clearCellToEmpty) {
+      cell.innerText = '';
+      cell.classList.remove('zablokowane');
+    } else {
+      cell.innerText = oldText;
+      if (oldLocked) cell.classList.add('zablokowane'); else cell.classList.remove('zablokowane');
+    }
   }
   // Przywróć generala
   if (prevGenerałLicznik) generałLicznik = prevGenerałLicznik.slice();
@@ -431,7 +437,15 @@ function undoLast() {
     const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
     if (generalRow) {
       const generalCell = generalRow.cells[gracz + 1];
-      if (generalCell) generalCell.innerText = prevGenerałWynik[gracz];
+      if (generalCell) {
+        // Jeśli poprzednia wartość generała to 0, traktuj jako puste pole (tak jak w innych wierszach)
+        if (prevGenerałWynik[gracz] === 0) {
+          generalCell.innerText = '';
+          generalCell.classList.remove('zablokowane');
+        } else {
+          generalCell.innerText = prevGenerałWynik[gracz];
+        }
+      }
     }
   }
   
@@ -763,6 +777,8 @@ function zapisz(wartosc) {
 
   // GENERAŁ - główny wpis
   if (pole === "Generał" && wartosc === 50) {
+    // Zrób snapshot PRZED zmianą tablic generała, aby undo mógł przywrócić poprzedni stan
+    const snap = createSnapshot();
     if (generałLicznik[gracz] === 0) {
       generałWynik[gracz] = 50;
       generałLicznik[gracz] = 1;
@@ -770,6 +786,16 @@ function zapisz(wartosc) {
       generałWynik[gracz] += 100;
     }
     wynik = generałWynik[gracz];
+    // Zaktualizuj widok pola Generał
+    const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
+    if (generalRow) {
+      const generalCell = generalRow.cells[gracz + 1];
+      if (generalCell) generalCell.innerText = generałWynik[gracz];
+    }
+    // Dodaj snapshot i zakończ zapis (unikamy podwójnego snapshotu na końcu funkcji)
+    undoStack.push(snap);
+    finishSave();
+    return;
   }
   
   // Sprawdzenie czy to może być drugi/trzeci generał na innym polu
@@ -797,6 +823,8 @@ function zapisz(wartosc) {
       showInlineConfirm(confirmMessage, () => {
         // Tak: dodaj +100 do generała i zapisz
         const snap = createSnapshot();
+        // oznacz że to był "zwykły" generał na innym polu — przy cofaniu trzeba wyczyścić to pole
+        snap.clearCellToEmpty = true;
         generałWynik[gracz] += 100;
         // Aktualizuj pole Generał (jeśli istnieje)
         const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
