@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Gra w Kości – karta punktów</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1 style="font-size: 2.5em; margin: 20px 0;">🎲 Gra w Kości</h1>
+
+<div id="start" style="font-size: 1.2em;">
+  <div id="etap-liczba">
+    <h2>Liczba graczy</h2>
+    <div class="gracz-selector" id="liczba-graczy-buttons"></div>
+  </div>
+  
+  <div id="etap-nazwy" style="display:none;">
+    <h2>Nazwy graczy</h2>
+    <div id="nazwa-inputs"></div>
+    <button onclick="etapStartowania()">Dalej</button>
+  </div>
+  
+  <div id="etap-start" style="display:none;">
+    <h2>Gracz startowy</h2>
+    <div id="gracz-startowy"></div>
+    <button onclick="startGry()">Rozpocznij grę</button>
+  </div>
+</div>
+
+<p id="tura" style="font-size: 1.3em; font-weight: bold; color: #2c3e50; margin: 20px 0;"></p>
+
+<div id="controls">
+  <button id="btnUndo">Cofnij</button>
+  <button id="btnNewGame">Nowa gra</button>
+</div>
+
+<div class="layout">
+  <div class="table-wrapper">
+    <table id="tabela">
+      <tr>
+        <th>Pole</th>
+      </tr>
+    </table>
+  </div>
+
+  <div id="panel">
+    <h3>Wybór punktów</h3>
+    <p id="opis"></p>
+    <div id="opcje"></div>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
