@@ -10,6 +10,40 @@ let generałLicznik = [];
 let generałWynik = [];
 // Stos do cofania akcji
 let undoStack = [];
+// Numer aktualnej partii
+let currentGameNumber = 0;
+
+// STATYSTYKI I HISTORIA
+let gameStats = {
+  totalGames: 0,
+  gameHistory: [],
+  highscores: []
+};
+
+// Załaduj statystyki z localStorage
+function loadGameStats() {
+  const saved = localStorage.getItem('kosciGameStats');
+  if (saved) {
+    gameStats = JSON.parse(saved);
+  }
+  updateGameCounter();
+}
+
+// Zapisz statystyki do localStorage
+function saveGameStats() {
+  localStorage.setItem('kosciGameStats', JSON.stringify(gameStats));
+  updateGameCounter();
+}
+
+// Aktualizuj wyświetlany licznik partii
+function updateGameCounter() {
+  const counter = document.getElementById('total-games-counter');
+  if (counter) {
+    counter.innerText = gameStats.totalGames;
+  }
+}
+
+loadGameStats();
 
 /* =======================
    DEFINICJA PÓL
@@ -170,9 +204,23 @@ function etapNazwy() {
   
   nazwyGraczy = new Array(liczbaGraczy).fill("");
   
+  // Wyciągnij unikalne graczy z historii
+  const previousPlayers = new Set();
+  gameStats.gameHistory.forEach(game => {
+    game.results.forEach(result => {
+      previousPlayers.add(result.nazwa);
+    });
+  });
+  const previousPlayersArray = Array.from(previousPlayers).sort();
+  
   for (let g = 0; g < liczbaGraczy; g++) {
     const label = document.createElement("label");
     label.innerText = `Gracz ${g + 1}: `;
+    
+    // Utwórz kontener z inputem i przyciskiem dropdown
+    const inputContainer = document.createElement("div");
+    inputContainer.className = "nazwa-input-container";
+    
     const input = document.createElement("input");
     input.type = "text";
     input.value = `Gracz ${g + 1}`;
@@ -192,12 +240,65 @@ function etapNazwy() {
       }
     };
     
+    // Przycisk dropdown
+    const dropdownBtn = document.createElement("button");
+    dropdownBtn.className = "nazwa-input-dropdown-btn";
+    dropdownBtn.innerText = "▼";
+    dropdownBtn.type = "button";
+    
+    // Dropdown z listą
+    const dropdown = document.createElement("div");
+    dropdown.className = "nazwa-input-dropdown";
+    
+    previousPlayersArray.forEach(playerName => {
+      const item = document.createElement("div");
+      item.className = "nazwa-input-dropdown-item";
+      item.innerText = playerName;
+      item.onclick = (e) => {
+        e.stopPropagation();
+        input.value = playerName;
+        nazwyGraczy[g] = playerName;
+        dropdown.classList.remove("aktywny");
+        input.focus();
+      };
+      dropdown.appendChild(item);
+    });
+    
+    // Toggle dropdown
+    dropdownBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropdown.classList.toggle("aktywny");
+    };
+    
+    // Zamknij dropdown przy kliknięciu poza
+    inputContainer.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+    
+    inputContainer.appendChild(input);
+    if (previousPlayersArray.length > 0) {
+      inputContainer.appendChild(dropdownBtn);
+    }
+    inputContainer.appendChild(dropdown);
+    
     const div = document.createElement("div");
     div.className = "nazwa-input";
     div.appendChild(label);
-    div.appendChild(input);
+    div.appendChild(inputContainer);
     inputsDiv.appendChild(div);
   }
+  
+  // Zamknij wszystkie dropdowny przy kliknięciu poza
+  const handleClickOutside = (e) => {
+    const dropdowns = inputsDiv.querySelectorAll('.nazwa-input-dropdown');
+    dropdowns.forEach(dp => {
+      if (!dp.parentElement.contains(e.target)) {
+        dp.classList.remove('aktywny');
+      }
+    });
+  };
+  document.addEventListener('click', handleClickOutside, true);
   
   // Ustaw fokus na pierwszym inputie
   setTimeout(() => {
@@ -229,6 +330,9 @@ function startGry() {
   generałLicznik = new Array(liczbaGraczy).fill(0);
   generałWynik = new Array(liczbaGraczy).fill(0);
   
+  // Ustaw numer aktualnej partii
+  currentGameNumber = gameStats.totalGames + 1;
+  
   // Jeśli nie wybrano aktywnego gracza (np. kliknięto "Rozpocznij grę" bez wyboru), losuj startującego
   if (aktywnyGracz === null || typeof aktywnyGracz !== 'number') {
     aktywnyGracz = Math.floor(Math.random() * liczbaGraczy);
@@ -238,6 +342,7 @@ function startGry() {
   
   // Pokaż elementy gry
   document.getElementById("tura").classList.add("aktywna");
+  document.getElementById("partia-nr").classList.add("aktywna");
   document.querySelector(".layout").classList.add("aktywna");
   document.getElementById("controls").classList.add("aktywna");
   
@@ -253,6 +358,7 @@ function startGry() {
 function aktualizujTure() {
   const nazwa = nazwyGraczy[aktywnyGracz] || `Gracz ${aktywnyGracz + 1}`;
   document.getElementById("tura").innerText = `Tura: ${nazwa}`;
+  document.getElementById("partia-nr").innerText = `Partia: ${currentGameNumber}`;
 
   document.querySelectorAll("td").forEach(td => {
     td.classList.remove("aktywny-gracz");
@@ -476,6 +582,8 @@ function resetGame() {
   
   // Ukryj elementy gry
   document.getElementById("tura").classList.remove("aktywna");
+  document.getElementById("partia-nr").classList.remove("aktywna");
+  document.getElementById("partia-nr").innerText = "";
   document.querySelector(".layout").classList.remove("aktywna");
   document.getElementById("controls").classList.remove("aktywna");
   
@@ -514,16 +622,15 @@ document.addEventListener('keydown', (e) => {
 function bindControlButtons() {
   const btnUndo = document.getElementById('btnUndo');
   const btnNew = document.getElementById('btnNewGame');
+  const btnStats = document.getElementById('btnStats');
   if (btnUndo) {
-    // Ensure only one handler is attached
     btnUndo.onclick = (e) => { e.preventDefault(); requestUndo(btnUndo); };
-    btnUndo.removeEventListener('click', requestUndo);
-    btnUndo.addEventListener('click', () => requestUndo(btnUndo));
   }
   if (btnNew) {
     btnNew.onclick = (e) => { e.preventDefault(); requestNewGame(btnNew); };
-    btnNew.removeEventListener('click', requestNewGame);
-    btnNew.addEventListener('click', () => requestNewGame(btnNew));
+  }
+  if (btnStats) {
+    btnStats.onclick = (e) => { e.preventDefault(); showStatsPanel(); };
   }
 }
 
@@ -926,6 +1033,43 @@ function showGameEndModal() {
   // Sortuj po wyniku malejąco
   results.sort((a, b) => b.wynik - a.wynik);
   
+  // ZAPISZ WYNIKI DO HISTORII
+  gameStats.totalGames++;
+  const gameRecord = {
+    date: new Date().toLocaleString('pl-PL'),
+    results: results.map(r => ({
+      nazwa: r.nazwa,
+      wynik: r.wynik
+    }))
+  };
+  gameStats.gameHistory.unshift(gameRecord); // Dodaj na początek (najnowsze gry)
+  
+  // Ogranicz historię do ostatnich 50 gier
+  if (gameStats.gameHistory.length > 50) {
+    gameStats.gameHistory = gameStats.gameHistory.slice(0, 50);
+  }
+  
+  // AKTUALIZUJ HIGHSCORES
+  results.forEach(result => {
+    const existingScore = gameStats.highscores.find(hs => hs.nazwa === result.nazwa);
+    if (existingScore) {
+      existingScore.wynik = Math.max(existingScore.wynik, result.wynik);
+      existingScore.iloscPartii = (existingScore.iloscPartii || 0) + 1;
+    } else {
+      gameStats.highscores.push({
+        nazwa: result.nazwa,
+        wynik: result.wynik,
+        iloscPartii: 1
+      });
+    }
+  });
+  
+  // Sortuj highscores
+  gameStats.highscores.sort((a, b) => b.wynik - a.wynik);
+  
+  // Zapisz statystyki
+  saveGameStats();
+  
   // Stwórz modal
   const modal = document.createElement('div');
   modal.className = 'game-end-modal';
@@ -936,6 +1080,14 @@ function showGameEndModal() {
   const title = document.createElement('h2');
   title.innerText = '🎉 Koniec gry!';
   modalContent.appendChild(title);
+  
+  // Statystyki gry
+  const statsDiv = document.createElement('div');
+  statsDiv.className = 'game-stats-summary';
+  const totalGamesText = document.createElement('p');
+  totalGamesText.innerHTML = `<strong>Razem partii:</strong> ${gameStats.totalGames}`;
+  statsDiv.appendChild(totalGamesText);
+  modalContent.appendChild(statsDiv);
   
   const winner = results[0];
   const runnerUp = results[1];
@@ -967,11 +1119,105 @@ function showGameEndModal() {
   };
   buttons.appendChild(newGameBtn);
   
+  const statsBtn = document.createElement('button');
+  statsBtn.innerText = 'Historia i Highscore';
+  statsBtn.onclick = () => {
+    modal.remove();
+    showStatsPanel();
+  };
+  buttons.appendChild(statsBtn);
+  
   modalContent.appendChild(buttons);
   modal.appendChild(modalContent);
   document.body.appendChild(modal);
   
   // Pokaż modal
+  setTimeout(() => modal.classList.add('aktywny'), 0);
+}
+
+// Wyświetl panel statystyk i highscores
+function showStatsPanel() {
+  const modal = document.createElement('div');
+  modal.className = 'stats-modal';
+  
+  const modalContent = document.createElement('div');
+  modalContent.className = 'stats-content';
+  
+  const title = document.createElement('h2');
+  title.innerText = '📊 Historia rozgrywek';
+  modalContent.appendChild(title);
+  
+  // HIGHSCORES
+  const highscoresSection = document.createElement('div');
+  highscoresSection.className = 'stats-section';
+  
+  const hsTitle = document.createElement('h3');
+  hsTitle.innerText = `🏆 Najlepsze wyniki (${gameStats.highscores.length})`;
+  highscoresSection.appendChild(hsTitle);
+  
+  const hsTable = document.createElement('table');
+  hsTable.className = 'stats-table';
+  
+  const hsHeader = hsTable.insertRow();
+  hsHeader.innerHTML = '<th>Lp.</th><th>Gracz</th><th>Najlepszy wynik</th><th>Partie</th>';
+  
+  gameStats.highscores.slice(0, 10).forEach((hs, idx) => {
+    const row = hsTable.insertRow();
+    row.innerHTML = `<td>${idx + 1}</td><td>${hs.nazwa}</td><td><strong>${hs.wynik}</strong></td><td>${hs.iloscPartii}</td>`;
+  });
+  
+  highscoresSection.appendChild(hsTable);
+  modalContent.appendChild(highscoresSection);
+  
+  // HISTORIA OSTATNICH PARTII
+  const historySection = document.createElement('div');
+  historySection.className = 'stats-section';
+  
+  const histTitle = document.createElement('h3');
+  histTitle.innerText = `📜 Historia (${gameStats.gameHistory.length})`;
+  historySection.appendChild(histTitle);
+  
+  const historyDiv = document.createElement('div');
+  historyDiv.className = 'history-list';
+  
+  gameStats.gameHistory.slice(0, 20).forEach((game, idx) => {
+    const gameDiv = document.createElement('div');
+    gameDiv.className = 'history-item';
+    
+    const dateSpan = document.createElement('span');
+    dateSpan.className = 'history-date';
+    dateSpan.innerText = game.date;
+    gameDiv.appendChild(dateSpan);
+    
+    const resultsSpan = document.createElement('span');
+    resultsSpan.className = 'history-results';
+    resultsSpan.innerText = game.results
+      .map((r, i) => `${i + 1}. ${r.nazwa} (${r.wynik})`)
+      .join(' | ');
+    gameDiv.appendChild(resultsSpan);
+    
+    historyDiv.appendChild(gameDiv);
+  });
+  
+  historySection.appendChild(historyDiv);
+  modalContent.appendChild(historySection);
+  
+  // PRZYCISKI
+  const buttons = document.createElement('div');
+  buttons.className = 'stats-buttons';
+  
+  const backBtn = document.createElement('button');
+  backBtn.innerText = 'Powrót';
+  backBtn.onclick = () => {
+    modal.remove();
+  };
+  buttons.appendChild(backBtn);
+  
+  modalContent.appendChild(buttons);
+  modal.appendChild(modalContent);
+  document.body.appendChild(modal);
+  
+  // Pokaż modal - nie dodawaj event listenera na tło aby zapobiec zamknięciu
   setTimeout(() => modal.classList.add('aktywny'), 0);
 }
 
