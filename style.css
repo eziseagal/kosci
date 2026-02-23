@@ -308,6 +308,68 @@ h1 {
   display: none;
 }
 
+/* Left floating area for top-left controls (tura, partia-nr)
+   Reserve visual space so these controls never overlap the game table. */
+#left-floating {
+  position: fixed;
+  left: 16px;
+  top: 16px;
+  z-index: 2250;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  pointer-events: auto;
+}
+
+/* Make vertical gaps between title, tura and partia match the small
+   gap used by inline confirms/buttons (8px). Only affects spacing,
+   not element sizes or borders. */
+#left-floating > * {
+  margin: 0 0 8px 0;
+}
+
+/* Remove extra negative/top margins that were set globally when elements
+   are moved into the floating container so spacing is consistent. */
+#left-floating #tura,
+#left-floating #partia-nr {
+  margin: 0 0 8px 0 !important;
+}
+
+/* When left-floating is active reserve space for the layout so table is not overlapped */
+/* When left-floating is active, adjust the layout to account for left controls */
+body.left-floating .layout.aktywna {
+  min-width: calc(100vw - 300px);
+  margin-left: 150px; /* offset to center relative to remaining viewport */
+}
+
+/* Ensure the main title also respects the reserved left area and stays
+   visually centered with the table when left-floating is active. */
+body.left-floating h1 {
+  max-width: calc(100vw - 300px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Floating title when left controls are present */
+.floating-title {
+  /* when present, make title flow inside the left-floating container
+     (we avoid fixed positioning to prevent it from covering the table) */
+  position: static;
+  left: auto;
+  transform: none;
+  z-index: 2245;
+  max-width: calc(100vw - 300px);
+  width: auto;
+  text-align: center;
+  margin: 0;
+}
+
+/* Ensure moved elements align nicely inside the floating container */
+#left-floating #tura, #left-floating #partia-nr {
+  margin: 0;
+}
+
 /* Kiedy gra się zaczyna, pokaż elementy */
 #tura.aktywna {
   display: block;
@@ -330,19 +392,21 @@ h1 {
 }
 
 .layout.aktywna {
-  display: grid;
-  grid-template-columns: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-width: 100vw;
   gap: 16px;
-  align-items: start;
-  background: rgba(255, 255, 255, 0.98);
+  background: transparent;
   padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  margin: 8px auto;
-  width: max-content;
-  min-width: fit-content;
-  max-width: calc(100vw - 200px);
-  overflow: hidden;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  width: auto;
+  max-width: none;
+  overflow: auto;
 }
 
 .table-wrapper {
@@ -358,6 +422,28 @@ h1 {
 table {
   border-collapse: collapse;
   width: auto;
+  border: 3px solid #f0f0f0;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Round corners on header cells */
+thead tr:first-child th:first-child {
+  border-radius: 5px 0 0 0;
+}
+
+thead tr:first-child th:last-child {
+  border-radius: 0 5px 0 0;
+}
+
+/* Round corners on last row cells */
+tbody tr:last-child td:first-child {
+  border-radius: 0 0 0 5px;
+}
+
+tbody tr:last-child td:last-child {
+  border-radius: 0 0 5px 0;
 }
 
 th {
@@ -371,6 +457,10 @@ th {
   font-size: 1.02em;
   text-shadow: 0 1px 2px rgba(0,0,0,0.2);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+th:first-child {
+  border-right: 2px solid #2c3e50;
 }
 
 td {
@@ -496,6 +586,39 @@ tr[data-sum="RAZEM"] td:not(:first-child) {
   box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
 }
 
+/* Rematch button color (yellow-orange) used in the two-option confirm */
+.rematch-btn {
+  background: linear-gradient(135deg, #ffb74d 0%, #ff9800 100%);
+  color: #5d2b00;
+  border: none;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.18);
+  font-weight: 700;
+  padding: 9px 14px;
+  border-radius: 5px;
+}
+.rematch-btn:hover {
+  background: linear-gradient(135deg, #ffa726 0%, #fb8c00 100%);
+  box-shadow: 0 6px 16px rgba(255, 152, 0, 0.22);
+  transform: translateY(-2px);
+}
+
+/* Ensure rematch button overrides the default red 'inline-no' styles when inside confirms */
+.inline-confirm-actions .rematch-btn,
+.inline-confirm .rematch-btn,
+.inline-confirm.global-fixed .rematch-btn,
+.inline-confirm.global .rematch-btn {
+  background: linear-gradient(135deg, #ffb74d 0%, #ff9800 100%) !important;
+  color: #5d2b00 !important;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.18) !important;
+  border-color: rgba(0,0,0,0.08) !important;
+}
+.inline-confirm-actions .rematch-btn:hover,
+.inline-confirm .rematch-btn:hover,
+.inline-confirm.global-fixed .rematch-btn:hover,
+.inline-confirm.global .rematch-btn:hover {
+  background: linear-gradient(135deg, #ffa726 0%, #fb8c00 100%) !important;
+}
+
 td:first-child {
   font-weight: 700;
   background: linear-gradient(135deg, #f8f9fa 0%, #f0f0f0 100%);
@@ -503,6 +626,8 @@ td:first-child {
   font-size: 0.95em;
   color: #2c3e50;
   min-width: 140px;
+  border-top: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
 }
 
 .zablokowane {
@@ -793,6 +918,9 @@ td.nieaktywny {
 
 .game-end-buttons {
   margin-top: 30px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .game-end-buttons button {
@@ -813,6 +941,7 @@ td.nieaktywny {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
 }
+ 
 
 /* =======================
    STATYSTYKI I HISTORIA
@@ -848,8 +977,17 @@ td.nieaktywny {
   max-width: 700px;
   width: 90%;
   max-height: 85vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* body will scroll, not the whole modal */
   animation: slideIn 0.4s ease-out;
+}
+
+/* Scrollable body inside modal to keep footer/buttons visible */
+.stats-body {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  padding-right: 8px; /* avoid hiding content under scrollbar */
 }
 
 .stats-content h2 {
@@ -913,6 +1051,24 @@ td.nieaktywny {
 
 .stats-table tbody tr:hover {
   background: #e3f2fd;
+}
+
+/* Highscores wrapper: show ~5 rows and allow scrolling */
+.highscores-wrapper {
+  max-height: calc(5 * 48px + 48px); /* approx 5 rows + header */
+  overflow-y: auto;
+  border-radius: 6px;
+  padding-right: 8px; /* avoid clipping under scrollbar */
+  margin-bottom: 8px;
+}
+
+/* Keep header visible when scrolling highscores */
+.highscores-wrapper .stats-table thead th {
+  position: sticky;
+  top: 0;
+  background: #2196f3;
+  color: white;
+  z-index: 5;
 }
 
 .history-list {

@@ -350,6 +350,8 @@ function startGry() {
   aktualizujTure();
   // Re-bind buttons in case DOM changed
   bindControlButtons();
+  // Ensure top-left controls float and reserve table space
+  setupFloatingLeftControls();
 }
 
 /* =======================
@@ -365,8 +367,10 @@ function aktualizujTure() {
   });
 
   document.querySelectorAll("#tabela tr").forEach(tr => {
+    // Skip summary rows (they use data-sum) so they are not highlighted
+    if (tr.dataset && tr.dataset.sum) return;
     const td = tr.cells[aktywnyGracz + 1];
-    if (td && !td.classList.contains("zablokowane")) {
+    if (td && !td.classList.contains('zablokowane')) {
       td.classList.add("aktywny-gracz");
     }
   });
@@ -455,8 +459,9 @@ function renderOpcje(pole) {
   input.type = "number";
   input.min = "0";
   input.max = "50";
-  input.placeholder = "Wpisz liczbę";
+  input.placeholder = "";
   input.spellcheck = false;
+  input.autofocus = true;
   
   input.onkeypress = (e) => {
     if (e.key === "Enter") {
@@ -483,12 +488,6 @@ function renderOpcje(pole) {
   
   inputDiv.appendChild(input);
   box.appendChild(inputDiv);
-
-  // Separator
-  const sep = document.createElement("div");
-  sep.className = "separator";
-  sep.innerText = "LUB - kliknij przycisk";
-  box.appendChild(sep);
 
   // Przyciski opcji
   const buttonsDiv = document.createElement("div");
@@ -602,11 +601,102 @@ function resetGame() {
   generałWynik = new Array(liczbaGraczy).fill(0);
   undoStack = [];
   document.getElementById('panel').classList.remove('aktywny');
+  // remove reserved left space when at start screen
+  document.body.classList.remove('left-floating');
+  setupFloatingLeftControls();
 }
 
 function requestNewGame(targetEl) {
-  if (targetEl) showInlineConfirmNear(targetEl, 'Rozpocząć nową grę? Wszystkie dane zostaną utracone.', () => resetGame(), () => {});
-  else showInlineConfirm('Rozpocząć nową grę? Wszystkie dane zostaną utracone.', () => resetGame(), () => {});
+  const msg = 'Rozpocząć nową grę? Wszystkie dane zostaną utracone.';
+  if (targetEl) {
+    // show inline three-option confirm near the clicked element: Nowa gra | Rewanż | Nie
+    showInlineConfirmNearThreeOptions(targetEl, msg,
+      'Nowa gra', 'Rewanż', 'Nie',
+      () => resetGame(),
+      () => replayGame(),
+      () => {}
+    );
+  } else {
+    // center modal with two options (Nowa gra / Rewanż)
+    showInlineConfirmTwoOptions(msg, 'Nowa gra', 'Rewanż', () => resetGame(), () => replayGame());
+  }
+}
+
+// Inline confirm placed near a target element with three labeled options
+function showInlineConfirmNearThreeOptions(targetEl, message, opt1Label, opt2Label, opt3Label, onOpt1, onOpt2, onOpt3) {
+  const existing = document.body.querySelector('.inline-confirm.global');
+  if (existing) existing.remove();
+
+  const box = document.createElement('div');
+  box.className = 'inline-confirm global';
+  box.style.position = 'fixed';
+  box.style.zIndex = 2300;
+
+  const msg = document.createElement('div');
+  msg.className = 'inline-confirm-msg';
+  msg.innerText = message;
+  box.appendChild(msg);
+
+  const actions = document.createElement('div');
+  actions.className = 'inline-confirm-actions';
+
+  const yes = document.createElement('button');
+  yes.className = 'inline-yes';
+  yes.innerText = opt1Label || 'Tak';
+  yes.onclick = () => { box.remove(); if (onOpt1) onOpt1(); };
+
+  const rematch = document.createElement('button');
+  rematch.className = 'rematch-btn';
+  rematch.innerText = opt2Label || 'Rewanż';
+  rematch.onclick = () => { box.remove(); if (onOpt2) onOpt2(); };
+
+  const no = document.createElement('button');
+  no.className = 'inline-no';
+  no.innerText = opt3Label || 'Nie';
+  no.onclick = () => { box.remove(); if (onOpt3) onOpt3(); };
+
+  actions.appendChild(yes);
+  actions.appendChild(rematch);
+  actions.appendChild(no);
+  box.appendChild(actions);
+
+  document.body.appendChild(box);
+
+  // Positioning near targetEl
+  const rect = targetEl.getBoundingClientRect();
+  const margin = 8;
+  let left = rect.right + margin;
+  let top = rect.top;
+
+  const brect = box.getBoundingClientRect();
+  if (left + brect.width > window.innerWidth - margin) {
+    left = rect.left - brect.width - margin;
+  }
+  if (left < margin) left = margin;
+  if (top + brect.height > window.innerHeight - margin) {
+    top = window.innerHeight - brect.height - margin;
+  }
+  if (top < margin) top = margin;
+
+  box.style.left = Math.round(left) + 'px';
+  box.style.top = Math.round(top) + 'px';
+
+  setTimeout(() => yes.focus(), 0);
+
+  const onBoxKeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); yes.click(); }
+    if (e.key === 'Escape') { e.preventDefault(); no.click(); }
+  };
+  box.addEventListener('keydown', onBoxKeydown);
+
+  // remove if clicking outside
+  const onDocClick = (e) => {
+    if (!box.contains(e.target) && e.target !== targetEl) {
+      box.remove();
+      document.removeEventListener('mousedown', onDocClick);
+    }
+  };
+  setTimeout(() => document.addEventListener('mousedown', onDocClick), 0);
 }
 
 // Obsłuż Ctrl+Z (cofnij)
@@ -910,19 +1000,46 @@ function zapisz(wartosc) {
                           "Trzy jednakowe", "Cztery jednakowe", "Full", "Mały strit", "Duży strit", "Szansa"];
 
   if (generałLicznik[gracz] > 0 && pole !== "Generał" && polaZGeneralem.includes(pole)) {
-    let czySzansa = pole === "Szansa";
+    // Check for 5 of a kind (values 5, 10, 15, 20, 25, 30) in Szansa, Trzy jednakowe, Cztery jednakowe
+    const polesWith5OfAKind = ["Szansa", "Trzy jednakowe", "Cztery jednakowe"];
+    // Fields from 1 do 6
+    const polaOdJedynekDoSzostek = ["Jedynki", "Dwójki", "Trójki", "Czwórki", "Piątki", "Szóstki"];
     let needsConfirm = false;
     let confirmMessage = '';
+    let autoAddBonus = false;
 
-    if (czySzansa && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
+    // Pola 1-6 ze wartościami 5,10,15,20,25,30 -> zawsze generał, auto +100
+    if (polaOdJedynekDoSzostek.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
+      autoAddBonus = true;
+    } else if (polesWith5OfAKind.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
       needsConfirm = true;
       confirmMessage = 'Czy to jest generał (5 jednakowych)?\nDodać +100 do głównego generała?';
-    } else if (!czySzansa) {
+    } else if (polaOdJedynekDoSzostek.includes(pole) && wartosc === 0) {
+      // Pola 1-6 ze wartością 0 przy aktywnym generale -> pytaj
+      needsConfirm = true;
+      confirmMessage = 'Czy ta wartość 0 jest spowodowana generałem?\nDodać +100 do głównego generała?';
+    } else if (!polesWith5OfAKind.includes(pole) && !polaOdJedynekDoSzostek.includes(pole)) {
       const maxValue = Math.max(...pola[pole]);
       if (wartosc === maxValue) {
         needsConfirm = true;
         confirmMessage = 'Czy to jest generał?\nDodać +100 do głównego generała?';
       }
+    }
+
+    if (autoAddBonus) {
+      // Automatycznie dodaj +100 dla wartości 5,10,15,20,25,30 w polach 1-6
+      const snap = createSnapshot();
+      snap.clearCellToEmpty = true;
+      generałWynik[gracz] += 100;
+      // Aktualizuj pole Generał (jeśli istnieje)
+      const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
+      if (generalRow) {
+        const generalCell = generalRow.cells[gracz + 1];
+        if (generalCell) generalCell.innerText = generałWynik[gracz];
+      }
+      undoStack.push(snap);
+      finishSave();
+      return;
     }
 
     if (needsConfirm) {
@@ -1089,13 +1206,25 @@ function showGameEndModal() {
   statsDiv.appendChild(totalGamesText);
   modalContent.appendChild(statsDiv);
   
-  const winner = results[0];
-  const runnerUp = results[1];
-  const advantage = winner.wynik - runnerUp.wynik;
+  // Obsługa remisu - znajdź wszystkich graczy z najwyższym wynikiem
+  const maxScore = results[0].wynik;
+  const winners = results.filter(r => r.wynik === maxScore);
+  const runnerUp = results.find(r => r.wynik < maxScore);
   
   const resultText = document.createElement('p');
   resultText.className = 'game-end-result';
-  resultText.innerHTML = `<strong>${winner.nazwa}</strong> wygrywa z wynikiem <strong>${winner.wynik}</strong> punktów<br>Przewaga: <strong>+${advantage}</strong> punkty nad ${runnerUp.nazwa}`;
+  
+  if (winners.length > 1) {
+    // Remis
+    const winnerNames = winners.map(w => w.nazwa).join(', ');
+    resultText.innerHTML = `🤝 <strong>REMIS!</strong><br><strong>${winnerNames}</strong><br>wszyscy mają <strong>${maxScore}</strong> punktów`;
+  } else {
+    // Jedna osoba wygrała
+    const winner = winners[0];
+    const advantage = winner.wynik - (runnerUp ? runnerUp.wynik : 0);
+    resultText.innerHTML = `<strong>${winner.nazwa}</strong> wygrywa z wynikiem <strong>${winner.wynik}</strong> punktów<br>Przewaga: <strong>+${advantage}</strong> punkty`;
+  }
+  
   modalContent.appendChild(resultText);
   
   const ranking = document.createElement('div');
@@ -1115,12 +1244,15 @@ function showGameEndModal() {
   newGameBtn.innerText = 'Nowa gra';
   newGameBtn.onclick = () => {
     modal.remove();
-    resetGame();
+    // Ask whether user wants a fresh new game or a rematch
+    showInlineConfirmTwoOptions('Co chcesz zrobić?', 'Nowa gra', 'Rewanż', () => resetGame(), () => replayGame());
   };
   buttons.appendChild(newGameBtn);
   
+  // (Przycisk "Zagraj ponownie" usunięty - używamy teraz opcji w potwierdzeniu)
+  
   const statsBtn = document.createElement('button');
-  statsBtn.innerText = 'Historia i Highscore';
+  statsBtn.innerText = 'Historia rozgrywek';
   statsBtn.onclick = () => {
     modal.remove();
     showStatsPanel();
@@ -1135,6 +1267,105 @@ function showGameEndModal() {
   setTimeout(() => modal.classList.add('aktywny'), 0);
 }
 
+// Inline confirm with custom labels for the two choices
+function showInlineConfirmTwoOptions(message, opt1Label, opt2Label, onOpt1, onOpt2) {
+  // remove any existing global confirms/overlays
+  const existing = document.body.querySelector('.inline-confirm.global-fixed');
+  if (existing) existing.remove();
+  const existingOverlay = document.body.querySelector('.confirm-overlay');
+  if (existingOverlay) existingOverlay.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.style.position = 'fixed';
+  overlay.style.top = '0';
+  overlay.style.left = '0';
+  overlay.style.width = '100%';
+  overlay.style.height = '100%';
+  overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
+  overlay.style.zIndex = 2250;
+  document.body.appendChild(overlay);
+
+  const box = document.createElement('div');
+  box.className = 'inline-confirm global-fixed';
+  box.style.position = 'fixed';
+  box.style.zIndex = 2300;
+  box.style.minWidth = '280px';
+  box.style.maxWidth = '450px';
+  box.style.padding = '16px';
+  box.style.borderRadius = '8px';
+  box.style.backgroundColor = 'white';
+  box.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.2)';
+
+  const msg = document.createElement('div');
+  msg.className = 'inline-confirm-msg';
+  msg.innerText = message;
+  box.appendChild(msg);
+
+  const actions = document.createElement('div');
+  actions.className = 'inline-confirm-actions';
+  actions.style.marginTop = '16px';
+
+  const opt1 = document.createElement('button');
+  opt1.className = 'inline-yes';
+  opt1.innerText = opt1Label || 'Tak';
+  opt1.onclick = () => { box.remove(); overlay.remove(); if (onOpt1) onOpt1(); };
+
+  const opt2 = document.createElement('button');
+  opt2.className = 'inline-no';
+  opt2.innerText = opt2Label || 'Nie';
+  // mark rematch (rewanż) option with special styling
+  opt2.classList.add('rematch-btn');
+  opt2.onclick = () => { box.remove(); overlay.remove(); if (onOpt2) onOpt2(); };
+
+  actions.appendChild(opt1);
+  actions.appendChild(opt2);
+  box.appendChild(actions);
+
+  document.body.appendChild(box);
+
+  // center
+  const brect = box.getBoundingClientRect();
+  box.style.left = Math.round((window.innerWidth - brect.width) / 2) + 'px';
+  box.style.top = Math.round((window.innerHeight - brect.height) / 2) + 'px';
+
+  setTimeout(() => opt1.focus(), 0);
+
+  const onBoxKeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); opt1.click(); }
+    if (e.key === 'Escape') { e.preventDefault(); opt2.click(); }
+  };
+  box.addEventListener('keydown', onBoxKeydown);
+}
+
+// Restart the game immediately with the same players (keep `nazwyGraczy` and `liczbaGraczy`)
+function replayGame() {
+  // Reset generator arrays and undo stack
+  generałLicznik = new Array(liczbaGraczy).fill(0);
+  generałWynik = new Array(liczbaGraczy).fill(0);
+  undoStack = [];
+  aktywnaKomorka = null;
+
+  // Set up a new game number
+  currentGameNumber = gameStats.totalGames + 1;
+
+  // Ensure UI shows the game layout
+  document.getElementById('start').style.display = 'none';
+  document.getElementById('tura').classList.add('aktywna');
+  document.getElementById('partia-nr').classList.add('aktywna');
+  document.querySelector('.layout').classList.add('aktywna');
+  document.getElementById('controls').classList.add('aktywna');
+
+  // Rebuild the table and UI
+  init();
+  aktualizujTure();
+  bindControlButtons();
+  setupFloatingLeftControls();
+  // position title if needed
+  if (typeof updateFloatingTitlePosition === 'function') updateFloatingTitlePosition();
+}
+
+
 // Wyświetl panel statystyk i highscores
 function showStatsPanel() {
   const modal = document.createElement('div');
@@ -1147,6 +1378,10 @@ function showStatsPanel() {
   title.innerText = '📊 Historia rozgrywek';
   modalContent.appendChild(title);
   
+  // Container for scrollable body (keeps buttons visible)
+  const statsBody = document.createElement('div');
+  statsBody.className = 'stats-body';
+
   // HIGHSCORES
   const highscoresSection = document.createElement('div');
   highscoresSection.className = 'stats-section';
@@ -1155,19 +1390,42 @@ function showStatsPanel() {
   hsTitle.innerText = `🏆 Najlepsze wyniki (${gameStats.highscores.length})`;
   highscoresSection.appendChild(hsTitle);
   
+  // compute wins per player from gameHistory (only count if exactly one winner - no remis)
+  const winsMap = {};
+  gameStats.gameHistory.forEach(g => {
+    if (g.results && g.results.length > 0) {
+      // Znajdź maksymalny wynik w tej grze
+      const maxScore = Math.max(...g.results.map(r => r.wynik));
+      // Pobierz wszystkich graczy z maksymalnym wynikiem (remis)
+      const winners = g.results.filter(r => r.wynik === maxScore);
+      // Dodaj +1 tylko jeśli dokładnie jeden zwycięzca (bez remisu)
+      if (winners.length === 1 && winners[0].nazwa) {
+        winsMap[winners[0].nazwa] = (winsMap[winners[0].nazwa] || 0) + 1;
+      }
+    }
+  });
+  // Build highscores table and wrap it in a scrollable container that shows ~5 rows
+  const hsWrapper = document.createElement('div');
+  hsWrapper.className = 'highscores-wrapper';
+
   const hsTable = document.createElement('table');
   hsTable.className = 'stats-table';
-  
-  const hsHeader = hsTable.insertRow();
-  hsHeader.innerHTML = '<th>Lp.</th><th>Gracz</th><th>Najlepszy wynik</th><th>Partie</th>';
-  
-  gameStats.highscores.slice(0, 10).forEach((hs, idx) => {
-    const row = hsTable.insertRow();
-    row.innerHTML = `<td>${idx + 1}</td><td>${hs.nazwa}</td><td><strong>${hs.wynik}</strong></td><td>${hs.iloscPartii}</td>`;
+
+  const thead = hsTable.createTHead();
+  const headerRow = thead.insertRow();
+  headerRow.innerHTML = '<th>Lp.</th><th>Gracz</th><th>Najlepszy wynik</th><th>Wygrane</th><th>Partie</th>';
+
+  const tbody = hsTable.createTBody();
+  // render all highscores but constrain visible area via CSS
+  gameStats.highscores.forEach((hs, idx) => {
+    const row = tbody.insertRow();
+    const wins = winsMap[hs.nazwa] || 0;
+    row.innerHTML = `<td>${idx + 1}</td><td>${hs.nazwa}</td><td><strong>${hs.wynik}</strong></td><td>${wins}</td><td>${hs.iloscPartii}</td>`;
   });
-  
-  highscoresSection.appendChild(hsTable);
-  modalContent.appendChild(highscoresSection);
+
+  hsWrapper.appendChild(hsTable);
+  highscoresSection.appendChild(hsWrapper);
+  statsBody.appendChild(highscoresSection);
   
   // HISTORIA OSTATNICH PARTII
   const historySection = document.createElement('div');
@@ -1200,7 +1458,10 @@ function showStatsPanel() {
   });
   
   historySection.appendChild(historyDiv);
-  modalContent.appendChild(historySection);
+  statsBody.appendChild(historySection);
+
+  // append scrollable body to modal content so footer stays visible
+  modalContent.appendChild(statsBody);
   
   // PRZYCISKI
   const buttons = document.createElement('div');
@@ -1233,3 +1494,97 @@ function zakres(min, max, krok) {
   for (let i = min; i <= max; i += krok) a.push(i);
   return a;
 }
+
+/* =======================
+   FLOATING LEFT CONTROLS
+   Move `#tura` and `#partia-nr` into a fixed left container so they
+   stay visible while scrolling, and reserve space so they never
+   overlap the game table.
+======================= */
+function setupFloatingLeftControls() {
+  const tura = document.getElementById('tura');
+  const partia = document.getElementById('partia-nr');
+  if (!tura || !partia) return;
+
+  // handle title movement: keep reference to original location so we can restore
+  const title = document.querySelector('h1');
+  if (title && !window.__originalTitlePlace) {
+    window.__originalTitlePlace = { parent: title.parentElement, nextSibling: title.nextSibling };
+  }
+
+  let container = document.getElementById('left-floating');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'left-floating';
+    document.body.appendChild(container);
+  }
+
+  // Move the elements into the floating container if they aren't already there
+  if (tura.parentElement !== container) container.appendChild(tura);
+  if (partia.parentElement !== container) container.appendChild(partia);
+
+  // When the main layout is active, add a body class to reserve space
+  if (document.querySelector('.layout.aktywna')) {
+    document.body.classList.add('left-floating');
+    // move title into container above controls so it moves with them
+    if (title) {
+      // ensure title is not fixed-styled
+      title.classList.remove('floating-title');
+      if (title.parentElement !== container) container.insertBefore(title, container.firstChild);
+    }
+  } else {
+    document.body.classList.remove('left-floating');
+    // restore title to original place if stored
+    if (title && window.__originalTitlePlace) {
+      const { parent, nextSibling } = window.__originalTitlePlace;
+      if (parent && title.parentElement !== parent) parent.insertBefore(title, nextSibling);
+    }
+  }
+}
+
+// Ensure it's set up on load
+setupFloatingLeftControls();
+
+// Position the title under the left-floating container so they never overlap
+function updateFloatingTitlePosition() {
+  const container = document.getElementById('left-floating');
+  const title = document.querySelector('h1');
+  if (!title) return;
+
+  if (document.body.classList.contains('left-floating') && container) {
+    // make title floating and compute top
+    title.classList.add('floating-title');
+    const crect = container.getBoundingClientRect();
+    const top = Math.max(8, Math.round(crect.bottom + 8));
+    title.style.top = top + 'px';
+  } else {
+    // restore title to normal flow
+    title.classList.remove('floating-title');
+    title.style.top = '';
+  }
+}
+
+// update on resize/scroll and whenever layout changes
+// Debounce helper to avoid flooding on resize/scroll
+function debounce(fn, ms) {
+  let t;
+  return function(...args) {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(this, args), ms);
+  };
+}
+
+const debouncedUpdate = debounce(() => {
+  try {
+    setupFloatingLeftControls();
+    updateFloatingTitlePosition();
+  } catch (e) {
+    console.error('Floating update error', e);
+  }
+}, 80);
+
+window.addEventListener('resize', debouncedUpdate);
+window.addEventListener('scroll', debouncedUpdate);
+
+// initial position
+debouncedUpdate();
