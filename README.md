@@ -2,25 +2,22 @@
 
 **Kości** is a lightweight browser-based scoreboard designed for real-world dice games.
 
-This project intentionally does **not** simulate dice rolls.  
-Instead, it provides a clean interface for tracking scores, players, and game statistics while using physical dice at the table.
+This project does **not** simulate dice rolls.  
+Instead, it provides a clean and convenient interface for **tracking scores, players, and game history** while you roll physical dice at the table.
 
-🔗 **Open the app:**  
-https://eziseagal.github.io/kosci/
-
-📦 **Repository:**  
-https://github.com/eziseagal/kosci
+🔗 **Open the app:** https://eziseagal.github.io/kosci/  
+📦 **Repository:** https://github.com/eziseagal/kosci
 
 ---
 
 ## 🕹️ Concept
 
-Kości complements traditional tabletop play:
+Kości is meant to complement traditional tabletop play:
 
-- 🎲 Dice remain physical  
-- 🧮 Scores become digital  
+- 🎲 **Dice stay in your hands**
+- 🧮 **Scores stay on the screen**
 
-The app functions as a digital score table where players manually enter results from their real dice rolls. It is designed for board game nights, casual sessions, and any dice-based competition.
+The application acts as a digital score table where players manually enter results from their physical dice rolls. It’s ideal for casual gatherings, board game nights, or any dice-based competition.
 
 ---
 
