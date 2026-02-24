@@ -453,7 +453,7 @@ th {
   background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
   color: white;
   font-weight: bold;
-  min-width: 95px;
+  min-width: 110px;
   font-size: 1.02em;
   text-shadow: 0 1px 2px rgba(0,0,0,0.2);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
@@ -472,6 +472,10 @@ td {
   white-space: nowrap;
   font-weight: 500;
   color: #333;
+}
+
+td:not(:first-child) {
+  min-width: 110px;
 }
 
 td.pole-gry {
@@ -756,7 +760,7 @@ td.nieaktywny {
 }
 
 #panel {
-  transition: opacity 0.3s, transform 0.3s, box-shadow 0.3s, visibility 0.3s;
+  transition: opacity 0.2s, transform 0.2s, box-shadow 0.2s;
   opacity: 0;
   visibility: hidden;
   transform: translateY(-10px);
@@ -845,10 +849,13 @@ td.nieaktywny {
   padding: 32px;
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  max-width: 500px;
+  max-width: 550px;
   width: 90%;
   text-align: center;
   animation: slideIn 0.4s ease-out;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 @keyframes slideIn {
@@ -881,15 +888,16 @@ td.nieaktywny {
   padding: 20px;
   margin: 20px 0;
   text-align: left;
+  min-width: 100%;
 }
 
 .ranking-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px;
+  padding: 16px 12px;
   border-bottom: 1px solid #ddd;
-  font-size: 1.1em;
+  font-size: 1.2em;
 }
 
 .ranking-row:last-child {
@@ -899,26 +907,30 @@ td.nieaktywny {
 .ranking-row .rank {
   font-weight: bold;
   color: #2196f3;
-  min-width: 40px;
-  font-size: 1.3em;
+  min-width: 50px;
+  font-size: 1.4em;
 }
 
 .ranking-row .name {
   flex: 1;
-  margin-left: 10px;
+  margin: 0 15px;
   font-weight: 600;
   color: #2c3e50;
+  min-width: 120px;
 }
 
 .ranking-row .score {
   font-weight: bold;
   color: #4caf50;
-  font-size: 1.2em;
+  font-size: 1.3em;
+  min-width: 80px;
+  text-align: right;
 }
 
 .game-end-buttons {
   margin-top: 30px;
   display: flex;
+  justify-content: center;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -1107,17 +1119,20 @@ td.nieaktywny {
 }
 
 .game-stats-summary {
-  background: #e3f2fd;
-  border-left: 4px solid #2196f3;
-  padding: 15px;
-  border-radius: 4px;
-  margin: 15px 0;
+  background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+  border: none;
+  padding: 20px;
+  border-radius: 8px;
+  margin: 20px 0 25px 0;
+  color: white;
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
 }
 
 .game-stats-summary p {
-  margin: 5px 0;
-  color: #1565c0;
+  margin: 0;
+  color: white;
   font-weight: 600;
+  font-size: 1.1em;
 }
 
 .stats-buttons {
@@ -1155,4 +1170,110 @@ td.nieaktywny {
 .stats-buttons .btn-danger:hover {
   background: linear-gradient(135deg, #d32f2f 0%, #c62828 100%);
   box-shadow: 0 6px 16px rgba(244, 67, 54, 0.4);
+}
+
+/* Usunięcie spinner arrows z number input */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Animacje dla wiadomości inline */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+}
+
+.inline-message {
+  animation: fadeIn 0.3s ease-out;
+  padding: 10px 15px;
+  margin: 8px 0;
+  border-radius: 4px;
+  font-size: 0.95em;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.inline-message.error {
+  background-color: #ffebee;
+  color: #c62828;
+  border-left: 4px solid #d32f2f;
+}
+
+.inline-message.success {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border-left: 4px solid #4caf50;
+}
+
+/* Tooltip dla komunikatów PIN */
+.pin-tooltip {
+  position: fixed;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 3000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  animation: fadeIn 0.2s ease-out;
+  pointer-events: none;
+}
+
+.pin-tooltip-error {
+  background: #d32f2f;
+}
+
+.pin-tooltip-success {
+  background: #4caf50;
+}
+
+/* Tooltip na środku ekranu dla globalnych komunikatów */
+.center-tooltip {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 1em;
+  font-weight: 500;
+  text-align: center;
+  max-width: 400px;
+  z-index: 3500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  transition: opacity 0.3s ease-out;
+}
+
+.center-tooltip-error {
+  background: #d32f2f;
+}
+
+.center-tooltip-success {
+  background: #4caf50;
 }

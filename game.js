@@ -5,6 +5,7 @@ let aktywnyGracz = null;
 let aktywnaKomorka = null;
 let liczbaGraczy = 2;
 let nazwyGraczy = new Array(liczbaGraczy).fill("");
+let usedPlayerNames = []; // Lista nicków użytych w bieżącej grze
 
 let generałLicznik = [];
 let generałWynik = [];
@@ -13,6 +14,29 @@ let undoStack = [];
 // Numer aktualnej partii
 let currentGameNumber = 0;
 
+// SUPABASE
+const SUPABASE_URL = 'https://ucxluytjmrbopiwvqpgl.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_Yd4-7tGatl3FvmG1Y6C9Nw_Yj_nHs3C';
+
+let supabaseClient = null;
+
+// Inicjalizuj Supabase
+async function initSupabase() {
+  try {
+    if (window.supabase && window.supabase.createClient) {
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      console.log('Supabase initialized');
+      return true;
+    } else {
+      console.error('Supabase library not loaded');
+      return false;
+    }
+  } catch (error) {
+    console.error('Error initializing Supabase:', error);
+    return false;
+  }
+}
+
 // STATYSTYKI I HISTORIA
 let gameStats = {
   totalGames: 0,
@@ -20,18 +44,88 @@ let gameStats = {
   highscores: []
 };
 
-// Załaduj statystyki z localStorage
-function loadGameStats() {
-  const saved = localStorage.getItem('kosciGameStats');
-  if (saved) {
-    gameStats = JSON.parse(saved);
+// Załaduj statystyki z Supabase
+async function loadGameStats() {
+  // Jeśli Supabase nie zainicjalizowany, spróbuj go zainicjalizować
+  if (!supabaseClient) {
+    const success = await initSupabase();
+    if (!success) {
+      console.warn('Supabase not available, using localStorage fallback');
+      const saved = localStorage.getItem('kosciGameStats');
+      if (saved) {
+        gameStats = JSON.parse(saved);
+      }
+      updateGameCounter();
+      return;
+    }
   }
+
+  try {
+    // Załaduj licznik gier
+    const { data: statsData, error: statsError } = await supabaseClient
+      .from('game_stats')
+      .select('total_games')
+      .eq('id', 1)
+      .single();
+    
+    if (statsError) throw statsError;
+    gameStats.totalGames = statsData?.total_games || 0;
+
+    // Załaduj ostatnich 50 gier
+    const { data: historyData, error: historyError } = await supabaseClient
+      .from('game_history')
+      .select('date, results')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    
+    if (historyError) throw historyError;
+    gameStats.gameHistory = historyData || [];
+
+    // Załaduj highscores (z PIN dla weryfikacji)
+    const { data: highscoresData, error: highscoresError } = await supabaseClient
+      .from('highscores')
+      .select('nazwa, wynik, ilosc_partii, pin')
+      .order('wynik', { ascending: false });
+    
+    if (highscoresError) throw highscoresError;
+    gameStats.highscores = highscoresData || [];
+
+  } catch (error) {
+    console.error('Błąd przy ładowaniu statystyk:', error);
+    // Fallback na localStorage jeśli Supabase niedostępny
+    const saved = localStorage.getItem('kosciGameStats');
+    if (saved) {
+      gameStats = JSON.parse(saved);
+    }
+  }
+  
   updateGameCounter();
 }
 
-// Zapisz statystyki do localStorage
-function saveGameStats() {
-  localStorage.setItem('kosciGameStats', JSON.stringify(gameStats));
+// Zapisz statystyki do Supabase
+async function saveGameStats() {
+  if (!supabaseClient) {
+    console.warn('Supabase not available, using localStorage only');
+    localStorage.setItem('kosciGameStats', JSON.stringify(gameStats));
+    updateGameCounter();
+    return;
+  }
+
+  try {
+    // Zaktualizuj licznik gier
+    const { error: updateError } = await supabaseClient
+      .from('game_stats')
+      .update({ total_games: gameStats.totalGames })
+      .eq('id', 1);
+    
+    if (updateError) throw updateError;
+    
+    // Zapamiętaj w localStorage jako backup
+    localStorage.setItem('kosciGameStats', JSON.stringify(gameStats));
+  } catch (error) {
+    console.error('Błąd przy zapisie statystyk:', error);
+  }
+  
   updateGameCounter();
 }
 
@@ -42,8 +136,6 @@ function updateGameCounter() {
     counter.innerText = gameStats.totalGames;
   }
 }
-
-loadGameStats();
 
 /* =======================
    DEFINICJA PÓL
@@ -77,8 +169,12 @@ const gornePola = [
 /* =======================
    START
 ======================= */
-init();
-initPlayerCountButtons();
+// Czekaj aż dane się załadują, dopiero inicjalizuj interface
+(async () => {
+  await loadGameStats();
+  init();
+  initPlayerCountButtons();
+})();
 
 /* =======================
    INICJALIZACJA
@@ -131,7 +227,7 @@ function init() {
     headerRow.deleteCell(1);
   }
   for (let g = 0; g < liczbaGraczy; g++) {
-    headerRow.insertCell().innerText = nazwyGraczy[g] || `Gracz ${g + 1}`;
+    headerRow.insertCell().innerText = nazwyGraczy[g];
   }
 
   for (let pole in pola) {
@@ -142,27 +238,32 @@ function init() {
     for (let g = 0; g < liczbaGraczy; g++) {
       const c = r.insertCell();
       c.classList.add("pole-gry");
-        c.onmouseover = () => {
+      
+      // Hover efekt - tylko wizualna wskazówka
+      c.onmouseover = () => {
         if (!c.classList.contains("zablokowane") && g === aktywnyGracz) {
-          wybierzPole(pole, g, c);
+          c.style.opacity = "0.8";
         }
       };
-      // Utrzymaj fokus na inpucie także przy kliknięciu (kliknięcie nie powinno wyłączać możliwości wpisywania)
+      
+      c.onmouseleave = () => {
+        c.style.opacity = "1";
+      };
+      
+      // Klik - aktywuj input edycji
       c.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (!c.classList.contains("zablokowane") && g === aktywnyGracz) {
           wybierzPole(pole, g, c);
-          // Po otwarciu panelu ustaw fokus na polu wpisywania
+          // Ustaw fokus na polu wpisywania
           setTimeout(() => {
             const input = document.querySelector('.input-liczby input');
-            if (input) input.focus();
-          }, 0);
-        }
-      };
-      c.onmouseleave = () => {
-        if (aktywnaKomorka && aktywnaKomorka.gracz === g && aktywnaKomorka.pole === pole) {
-          // Nie ukrywaj jeszcze, czekaj aż myszka opuści panel
+            if (input) {
+              input.focus();
+              input.select();
+            }
+          }, 50);
         }
       };
     }
@@ -193,6 +294,12 @@ function dodajWiersz(nazwa) {
 /* =======================
    ETAPY STARTU
 ======================= */
+
+// Sprawdź czy nazwa jest bazowa (Gracz 1, Gracz 2, itd.)
+function isDefaultPlayerName(name) {
+  return /^Gracz \d+$/i.test(name.trim());
+}
+
 function etapNazwy() {
   // liczbaGraczy jest już ustawiona z kliknięcia przycisku
   
@@ -203,15 +310,12 @@ function etapNazwy() {
   inputsDiv.innerHTML = "";
   
   nazwyGraczy = new Array(liczbaGraczy).fill("");
+  usedPlayerNames = []; // Resetuj listę użytych nicków
   
-  // Wyciągnij unikalne graczy z historii
-  const previousPlayers = new Set();
-  gameStats.gameHistory.forEach(game => {
-    game.results.forEach(result => {
-      previousPlayers.add(result.nazwa);
-    });
-  });
-  const previousPlayersArray = Array.from(previousPlayers).sort();
+  // Wyciągnij tylko graczy którzy mają zarejestrowany PIN (z tabeli highscores)
+  const registeredPlayersArray = (gameStats.highscores || [])
+    .map(hs => hs.nazwa)
+    .sort((a, b) => a.localeCompare(b, 'pl'));
   
   for (let g = 0; g < liczbaGraczy; g++) {
     const label = document.createElement("label");
@@ -223,20 +327,87 @@ function etapNazwy() {
     
     const input = document.createElement("input");
     input.type = "text";
-    input.value = `Gracz ${g + 1}`;
-    input.onchange = (e) => { nazwyGraczy[g] = e.target.value || `Gracz ${g + 1}`; };
-    input.onblur = (e) => { nazwyGraczy[g] = e.target.value || `Gracz ${g + 1}`; };
-    input.onkeydown = (e) => {
+    input.value = "";
+    input.placeholder = `Wpisz nick`;
+    input.playerIndex = g;
+    
+    input.onchange = (e) => { 
+      nazwyGraczy[g] = e.target.value.trim(); 
+    };
+    
+    input.onblur = (e) => { 
+      // Nic - logika tylko na Enter
+    };
+    
+    input.onkeydown = async (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        nazwyGraczy[g] = input.value || `Gracz ${g + 1}`;
-        // Jeśli to ostatni gracz, przejdź do następnego kroku, inaczej przejdź do następnego inputu
-        if (g === liczbaGraczy - 1) {
-          etapStartowania();
-        } else {
-          const nextInput = inputsDiv.querySelectorAll('input')[g + 1];
-          if (nextInput) nextInput.focus();
+        const newName = input.value.trim();
+        
+        // Sprawdź czy wprowadzono nazwę
+        if (!newName) {
+          showPINTooltip(input, '❌ Wprowadź nick!', 'error', 1500);
+          return;
         }
+        
+        // Sprawdź czy nie jest bazową nazwą
+        if (isDefaultPlayerName(newName)) {
+          showPINTooltip(input, '❌ Wybierz unikalny nick!', 'error', 1500);
+          return;
+        }
+        
+        // Sprawdź czy nick już użyty w tej grze
+        if (usedPlayerNames.includes(newName) && newName !== nazwyGraczy[g]) {
+          showPINTooltip(input, '❌ Nick wybrano już!', 'error', 1500);
+          return;
+        }
+        
+        // Sprawdź czy to istniejący gracz
+        const isExistingPlayer = registeredPlayersArray.includes(newName);
+        
+        if (isExistingPlayer) {
+          // Istniejący gracz - weryfikacja PIN
+          const pinResult = await showInlinePINDialog(newName, true);
+          if (pinResult.cancelled) {
+            return;
+          }
+          // Weryfikuj PIN w bazie
+          const pinValid = await verifyPlayerPIN(newName, pinResult.pin);
+          if (!pinValid) {
+            showPINTooltip(input, '❌ Nieprawidłowy PIN!', 'error', 1500);
+            return;
+          }
+          nazwyGraczy[g] = newName;
+          usedPlayerNames.push(newName);
+          showPINTooltip(input, '✅ Zalogowano!', 'success', 1000);
+        } else {
+          // Nowy gracz - rejestracja PIN
+          const pinResult = await showInlinePINDialog(newName, false);
+          if (pinResult.cancelled) {
+            return;
+          }
+          // Zapisz nowego gracza
+          const saved = await createNewPlayerWithPIN(newName, pinResult.pin);
+          if (!saved) {
+            showPINTooltip(input, '❌ Błąd zapisu!', 'error', 1500);
+            return;
+          }
+          nazwyGraczy[g] = newName;
+          usedPlayerNames.push(newName);
+          showPINTooltip(input, '✅ Zarejestrowano!', 'success', 1000);
+        }
+        
+        input.value = nazwyGraczy[g];
+        
+        // Przejdź do następnego gracza
+        setTimeout(() => {
+          if (g === liczbaGraczy - 1) {
+            etapStartowania();
+          } else {
+            const nextInput = inputsDiv.querySelectorAll('input')[g + 1];
+            if (nextInput) nextInput.focus();
+          }
+        }, 500);
       }
     };
     
@@ -250,14 +421,34 @@ function etapNazwy() {
     const dropdown = document.createElement("div");
     dropdown.className = "nazwa-input-dropdown";
     
-    previousPlayersArray.forEach(playerName => {
+    registeredPlayersArray.forEach(playerName => {
       const item = document.createElement("div");
       item.className = "nazwa-input-dropdown-item";
       item.innerText = playerName;
-      item.onclick = (e) => {
+      item.onclick = async (e) => {
         e.stopPropagation();
+        
+        // Sprawdź czy nick już użyty w tej grze
+        if (usedPlayerNames.includes(playerName)) {
+          showPINTooltip(input, '❌ Nick już wybrany!', 'error', 1500);
+          return;
+        }
+        
+        // Weryfikacja PIN dla istniejącego gracza
+        const pinResult = await showInlinePINDialog(playerName, true);
+        if (pinResult.cancelled) {
+          return;
+        }
+        // Weryfikuj PIN w bazie
+        const pinValid = await verifyPlayerPIN(playerName, pinResult.pin);
+        if (!pinValid) {
+          showPINTooltip(input, '❌ Nieprawidłowy PIN!', 'error', 1500);
+          return;
+        }
+        
         input.value = playerName;
         nazwyGraczy[g] = playerName;
+        usedPlayerNames.push(playerName);
         dropdown.classList.remove("aktywny");
         input.focus();
       };
@@ -277,7 +468,7 @@ function etapNazwy() {
     });
     
     inputContainer.appendChild(input);
-    if (previousPlayersArray.length > 0) {
+    if (registeredPlayersArray.length > 0) {
       inputContainer.appendChild(dropdownBtn);
     }
     inputContainer.appendChild(dropdown);
@@ -307,6 +498,225 @@ function etapNazwy() {
   }, 0);
 }
 
+// Inline wiadomość nad inputem
+function showPINTooltip(inputElement, message, type = 'error', duration = 1500) {
+  // Usuń stary tooltip
+  const existing = document.querySelector('.pin-tooltip');
+  if (existing) existing.remove();
+  
+  // Oblicz pozycję PRZED dodaniem do DOM
+  const rect = inputElement.getBoundingClientRect();
+  
+  const tooltip = document.createElement('div');
+  tooltip.className = `pin-tooltip pin-tooltip-${type}`;
+  tooltip.innerText = message;
+  
+  // Dodaj tymczasowo żeby zmierzyć szerokość
+  tooltip.style.visibility = 'hidden';
+  document.body.appendChild(tooltip);
+  
+  const tooltipWidth = tooltip.offsetWidth;
+  const tooltipLeft = rect.left + rect.width / 2 - tooltipWidth / 2;
+  const tooltipTop = rect.top - 40;
+  
+  // Ustaw właściwą pozycję
+  tooltip.style.visibility = 'visible';
+  tooltip.style.left = tooltipLeft + 'px';
+  tooltip.style.top = tooltipTop + 'px';
+  
+  if (duration > 0) {
+    setTimeout(() => tooltip.remove(), duration);
+  }
+}
+
+// Tooltip na środku ekranu dla globalnych komunikatów
+function showCenterTooltip(message, type = 'error', duration = 2500) {
+  // Usuń stary tooltip
+  const existing = document.querySelector('.center-tooltip');
+  if (existing) existing.remove();
+  
+  const tooltip = document.createElement('div');
+  tooltip.className = `center-tooltip center-tooltip-${type}`;
+  tooltip.innerText = message;
+  tooltip.style.opacity = '0';
+  
+  document.body.appendChild(tooltip);
+  
+  // Pokaż tooltip po dodaniu do DOM
+  setTimeout(() => {
+    tooltip.style.opacity = '1';
+  }, 10);
+  
+  if (duration > 0) {
+    setTimeout(() => {
+      tooltip.style.opacity = '0';
+      setTimeout(() => tooltip.remove(), 300);
+    }, duration);
+  }
+}
+
+function showInlineMessage(inputElement, message, type = 'error', duration = 2000) {
+  // Usuń starą wiadomość
+  const existing = inputElement.parentElement.querySelector('.inline-message');
+  if (existing) existing.remove();
+  
+  const messageEl = document.createElement('div');
+  messageEl.className = 'inline-message';
+  messageEl.style.cssText = `
+    color: ${type === 'error' ? '#f44336' : '#4caf50'};
+    font-size: 0.85em;
+    margin-top: 5px;
+    animation: fadeIn 0.3s;
+  `;
+  messageEl.innerText = message;
+  inputElement.parentElement.appendChild(messageEl);
+  
+  if (duration > 0) {
+    setTimeout(() => messageEl.remove(), duration);
+  }
+}
+
+// Inline PIN dialog
+async function showInlinePINDialog(playerName, isExisting) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 2500;';
+    
+    const box = document.createElement('div');
+    box.style.cssText = 'background: white; padding: 30px; border-radius: 10px; text-align: center; min-width: 320px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);';
+    
+    const title = document.createElement('h3');
+    title.innerText = isExisting ? '🔐 Logowanie' : '🔐 Rejestracja PIN';
+    title.style.cssText = 'margin: 0 0 10px 0; color: #2c3e50;';
+    box.appendChild(title);
+    
+    const nameSpan = document.createElement('p');
+    nameSpan.innerText = playerName;
+    nameSpan.style.cssText = 'font-size: 0.95em; color: #666; margin: 0 0 15px 0; font-weight: 600;';
+    box.appendChild(nameSpan);
+    
+    const desc = document.createElement('p');
+    desc.innerText = isExisting ? 'Wpisz 4-cyfrowy PIN:' : 'Ustaw 4-cyfrowy PIN:';
+    desc.style.cssText = 'font-size: 0.9em; color: #999; margin: 0 0 12px 0;';
+    box.appendChild(desc);
+    
+    const input = document.createElement('input');
+    input.type = 'password';
+    input.maxLength = '4';
+    input.placeholder = '****';
+    input.inputMode = 'numeric';
+    input.style.cssText = 'width: 100%; padding: 12px; font-size: 1.2em; text-align: center; letter-spacing: 5px; border: 2px solid #ddd; border-radius: 6px; margin: 0 0 15px 0; box-sizing: border-box;';
+    box.appendChild(input);
+    
+    const buttonDiv = document.createElement('div');
+    buttonDiv.style.cssText = 'display: flex; gap: 10px;';
+    
+    const okBtn = document.createElement('button');
+    okBtn.innerText = 'OK';
+    okBtn.style.cssText = 'flex: 1; padding: 10px; background: #2196f3; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;';
+    okBtn.onmouseover = () => okBtn.style.background = '#1976d2';
+    okBtn.onmouseout = () => okBtn.style.background = '#2196f3';
+    okBtn.onclick = () => {
+      const pin = input.value.trim();
+      if (pin.length !== 4 || !/^\d+$/.test(pin)) {
+        showPINTooltip(input, '❌ PIN musi zawierać 4 cyfry!', 'error', 2000);
+        return;
+      }
+      overlay.remove();
+      resolve({ pin, cancelled: false });
+    };
+    buttonDiv.appendChild(okBtn);
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.innerText = 'Anuluj';
+    cancelBtn.style.cssText = 'flex: 1; padding: 10px; background: #f44336; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;';
+    cancelBtn.onmouseover = () => cancelBtn.style.background = '#d32f2f';
+    cancelBtn.onmouseout = () => cancelBtn.style.background = '#f44336';
+    cancelBtn.onclick = () => {
+      overlay.remove();
+      resolve({ pin: null, cancelled: true });
+    };
+    buttonDiv.appendChild(cancelBtn);
+    
+    box.appendChild(buttonDiv);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    
+    input.focus();
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') okBtn.click();
+      if (e.key === 'Escape') cancelBtn.click();
+    };
+  });
+}
+
+// Waliduj wszystkie nazwy graczy i upewnij się że mają PIN
+async function validateAndProceedToStart() {
+  // Sprawdź czy wszystkie nazwy są wypełnione i unikalne
+  for (let i = 0; i < liczbaGraczy; i++) {
+    const playerName = nazwyGraczy[i];
+    
+    // Sprawdź czy nazwa jest pusta
+    if (!playerName || playerName.trim() === '') {
+      showCenterTooltip(`Gracz ${i + 1}: Wprowadź nick przed przejściem dalej!`, 'error', 2500);
+      return;
+    }
+    
+    // Sprawdź czy nazwa nie jest bazowa
+    if (isDefaultPlayerName(playerName)) {
+      showCenterTooltip(`Gracz ${i + 1}: Wybierz unikalny nick zamiast "${playerName}"!`, 'error', 2500);
+      return;
+    }
+  }
+  
+  const registeredPlayersArray = (gameStats.highscores || [])
+    .map(hs => hs.nazwa)
+    .sort((a, b) => a.localeCompare(b, 'pl'));
+  
+  // Sprawdź każdego gracza i zapewnij PIN
+  for (let i = 0; i < liczbaGraczy; i++) {
+    const playerName = nazwyGraczy[i];
+    
+    // Jeśli gracz nie został przetworzony przez Enter (nie ma w usedPlayerNames)
+    if (!usedPlayerNames.includes(playerName)) {
+      const isExisting = registeredPlayersArray.includes(playerName);
+      
+      if (isExisting) {
+        // Istniejący gracz - wymaga PIN
+        const pinResult = await showInlinePINDialog(playerName, true);
+        if (pinResult.cancelled) {
+          return; // Anulowano - nie przechodź dalej
+        }
+        
+        const pinValid = await verifyPlayerPIN(playerName, pinResult.pin);
+        if (!pinValid) {
+          showCenterTooltip('Nieprawidłowy PIN dla gracza: ' + playerName, 'error', 2500);
+          return; // Nie przechodź dalej
+        }
+        
+        usedPlayerNames.push(playerName);
+      } else {
+        // Nowy gracz - wymaga rejestracji PIN
+        const pinResult = await showInlinePINDialog(playerName, false);
+        if (pinResult.cancelled) {
+          return; // Anulowano - nie przechodź dalej
+        }
+        
+        const saved = await createNewPlayerWithPIN(playerName, pinResult.pin);
+        if (!saved) {
+          showCenterTooltip('Błąd przy zapisywaniu gracza: ' + playerName, 'error', 2500);
+          return; // Nie przechodź dalej
+        }
+        
+        usedPlayerNames.push(playerName);
+      }
+    }
+  }
+  
+  // Wszyscy gracze zwalidowani - przejdź dalej
+  etapStartowania();
+}
+
 function etapStartowania() {
   document.getElementById("etap-nazwy").style.display = "none";
   document.getElementById("etap-start").style.display = "block";
@@ -316,7 +726,7 @@ function etapStartowania() {
   
   for (let g = 0; g < liczbaGraczy; g++) {
     const btn = document.createElement("button");
-    btn.innerText = nazwyGraczy[g] || `Gracz ${g + 1}`;
+    btn.innerText = nazwyGraczy[g];
     btn.onclick = () => { aktywnyGracz = g; startGry(); };
     startDiv.appendChild(btn);
   }
@@ -358,7 +768,7 @@ function startGry() {
    TURA
 ======================= */
 function aktualizujTure() {
-  const nazwa = nazwyGraczy[aktywnyGracz] || `Gracz ${aktywnyGracz + 1}`;
+  const nazwa = nazwyGraczy[aktywnyGracz];
   document.getElementById("tura").innerText = `Tura: ${nazwa}`;
   document.getElementById("partia-nr").innerText = `Partia: ${currentGameNumber}`;
 
@@ -383,62 +793,74 @@ function wybierzPole(pole, gracz, komorka) {
   if (gracz !== aktywnyGracz) return;
   if (komorka.classList.contains("zablokowane")) return;
 
-  aktywnaKomorka = { pole, gracz, komorka };
-
   const panel = document.getElementById("panel");
-  panel.classList.add("aktywny");
+  
+  // Jeśli panel był aktywny, czekaj aż transition się skończy
+  if (panel.classList.contains("aktywny")) {
+    // Wyczyść zawartość zaraz (bez delay)
+    document.getElementById("opcje").innerHTML = "";
+    panel.classList.remove("aktywny");
+    // Czekaj na koniec transition (0.2s) + mały margin
+    setTimeout(() => {
+      openPanel(pole, gracz, komorka);
+    }, 210);
+  } else {
+    // Jeśli panel był zamknięty, otwórz od razu
+    openPanel(pole, gracz, komorka);
+  }
+}
+
+function openPanel(pole, gracz, komorka) {
+  aktywnaKomorka = { pole, gracz, komorka };
+  const panel = document.getElementById("panel");
+  
   document.getElementById("opis").innerText =
-    `${pole} – ${nazwyGraczy[gracz] || `Gracz ${gracz + 1}`}`;
+    `${pole} – ${nazwyGraczy[gracz]}`;
 
   renderOpcje(pole);
   
-  // Po wyrenderowaniu opcji ustaw fokus i wypozycjonuj panel obok komórki
+  // Wyrenderuj zawartość, potem pozycjonuj i pokaż
   setTimeout(() => {
+    // Pozycjonuj panel gdy zawartość jest już wyrenderowana
+    positionPanelNearCell(komorka);
+    
+    // Dodaj klasę aktywny - panel pojawi się już na prawidłowym miejscu
+    panel.classList.add("aktywny");
+    
     const input = document.querySelector(".input-liczby input");
     if (input) {
       input.value = "";
       input.focus();
       input.select();
     }
-    positionPanelNearCell(komorka);
   }, 50);
-  
-  // Dodaj event listener na panel aby go schować
-  panel.onmouseleave = () => {
-    panel.classList.remove("aktywny");
-    document.getElementById("opcje").innerHTML = "";
-    aktywnaKomorka = null;
-  };
 }
 
 // Ustaw pozycję panelu obok podanej komórki, dbając o granice ekranu
 function positionPanelNearCell(komorka) {
   const panel = document.getElementById('panel');
   if (!komorka || !panel) return;
-  // Najpierw upewnij się, że panel jest widoczny aby zmierzyć jego rozmiary
-  panel.classList.add('aktywny');
-  // Mały delay, żeby DOM się wyrenderował
-  setTimeout(() => {
-    const crect = komorka.getBoundingClientRect();
-    const prect = panel.getBoundingClientRect();
-    const margin = 8;
-    let left = crect.right + margin;
-    // jeśli nie mieści się po prawej, postaraj się po lewej
-    if (left + prect.width > window.innerWidth - margin) {
-      left = crect.left - prect.width - margin;
-    }
-    if (left < margin) left = margin;
+  
+  const crect = komorka.getBoundingClientRect();
+  const prect = panel.getBoundingClientRect();
+  const margin = 8;
+  let left = crect.right + margin;
+  
+  // jeśli nie mieści się po prawej, postaraj się po lewej
+  if (left + prect.width > window.innerWidth - margin) {
+    left = crect.left - prect.width - margin;
+  }
+  if (left < margin) left = margin;
 
-    // Wyrównaj pionowo względem komórki, ale mieszcz w oknie
-    let top = crect.top;
-    if (top + prect.height > window.innerHeight - margin) {
-      top = window.innerHeight - prect.height - margin;
-    }
-    if (top < margin) top = margin;
+  // Wyrównaj pionowo względem komórki, ale mieszcz w oknie
+  let top = crect.top;
+  if (top + prect.height > window.innerHeight - margin) {
+    top = window.innerHeight - prect.height - margin;
+  }
+  if (top < margin) top = margin;
 
-    panel.style.left = Math.round(left) + 'px';
-    panel.style.top = Math.round(top) + 'px';
-  }, 0);
+  panel.style.left = Math.round(left) + 'px';
+  panel.style.top = Math.round(top) + 'px';
 }
 
 /* =======================
@@ -447,10 +869,6 @@ function positionPanelNearCell(komorka) {
 function renderOpcje(pole) {
   const box = document.getElementById("opcje");
   box.innerHTML = "";
-  
-  // Usuń stare potwierdzenia z panelu (mogą być od poprzedniego gracza)
-  const oldConfirm = document.getElementById('panel').querySelector('.inline-confirm');
-  if (oldConfirm) oldConfirm.remove();
 
   // Dodaj input dla wpisania liczby
   const inputDiv = document.createElement("div");
@@ -517,7 +935,30 @@ function renderOpcje(pole) {
   };
 }
 
-// Undo ostatniej akcji (bez potwierdzenia) - przywraca stan z ostatniego push
+// Zamknij panel gdy kliknę poza
+document.addEventListener('mousedown', (e) => {
+  const panel = document.getElementById('panel');
+  if (!panel) return;
+  
+  // Nie zamykaj panelu gdy klikam na komórkę gry (zaraz onclick otworzy nowy)
+  if (e.target.closest('td.pole-gry')) {
+    return;
+  }
+  
+  if (aktywnaKomorka && panel.classList.contains('aktywny')) {
+    const { komorka } = aktywnaKomorka;
+    // Jeśli kliknie poza panelem I poza komórką, zamknij panel
+    if (!panel.contains(e.target) && !komorka.contains(e.target)) {
+      panel.classList.remove('aktywny');
+      document.getElementById('opcje').innerHTML = '';
+      aktywnaKomorka = null;
+    }
+  }
+}, true);
+
+/* =======================
+   UNDO
+======================= */
 function undoLast() {
   if (undoStack.length === 0) return;
   const snap = undoStack.pop();
@@ -943,11 +1384,21 @@ function zapisz(wartosc) {
   let wynik = wartosc;
 
   function createSnapshot() {
+    // Jeśli komórka ma input, pobierz aktualną wartość stąd, inaczej z innerText
+    let oldTextValue = '';
+    const editContainer = komorka ? komorka.querySelector('.cell-edit-container') : null;
+    if (editContainer) {
+      const input = editContainer.querySelector('.cell-edit-input');
+      oldTextValue = input ? input.value : '';
+    } else {
+      oldTextValue = komorka ? komorka.innerText : '';
+    }
+    
     return {
       pole,
       gracz,
       cell: komorka,
-      oldText: komorka ? komorka.innerText : '',
+      oldText: oldTextValue,
       oldLocked: komorka ? komorka.classList.contains('zablokowane') : false,
       prevGenerałLicznik: generałLicznik.slice(),
       prevGenerałWynik: generałWynik.slice(),
@@ -960,6 +1411,8 @@ function zapisz(wartosc) {
     komorka.classList.add("zablokowane");
 
     aktywnaKomorka = null;
+    
+    // Zamknij panel
     document.getElementById("panel").classList.remove("aktywny");
     document.getElementById("opcje").innerHTML = "";
 
@@ -1142,7 +1595,7 @@ function showGameEndModal() {
     const razem = document.querySelector(`tr[data-sum="RAZEM"]`).cells[g + 1].innerText;
     results.push({
       gracz: g,
-      nazwa: nazwyGraczy[g] || `Gracz ${g + 1}`,
+      nazwa: nazwyGraczy[g],
       wynik: parseInt(razem) || 0
     });
   }
@@ -1150,43 +1603,140 @@ function showGameEndModal() {
   // Sortuj po wyniku malejąco
   results.sort((a, b) => b.wynik - a.wynik);
   
-  // ZAPISZ WYNIKI DO HISTORII
-  gameStats.totalGames++;
-  const gameRecord = {
-    date: new Date().toLocaleString('pl-PL'),
-    results: results.map(r => ({
-      nazwa: r.nazwa,
-      wynik: r.wynik
-    }))
-  };
-  gameStats.gameHistory.unshift(gameRecord); // Dodaj na początek (najnowsze gry)
-  
-  // Ogranicz historię do ostatnich 50 gier
-  if (gameStats.gameHistory.length > 50) {
-    gameStats.gameHistory = gameStats.gameHistory.slice(0, 50);
-  }
-  
-  // AKTUALIZUJ HIGHSCORES
-  results.forEach(result => {
-    const existingScore = gameStats.highscores.find(hs => hs.nazwa === result.nazwa);
-    if (existingScore) {
-      existingScore.wynik = Math.max(existingScore.wynik, result.wynik);
-      existingScore.iloscPartii = (existingScore.iloscPartii || 0) + 1;
-    } else {
-      gameStats.highscores.push({
-        nazwa: result.nazwa,
-        wynik: result.wynik,
-        iloscPartii: 1
-      });
+  // ZAPISZ WYNIKI DO SUPABASE I LOKALNIE
+  (async () => {
+    try {
+      // Dodaj grę do historii
+      const gameRecord = {
+        date: new Date().toLocaleString('pl-PL'),
+        results: results.map(r => ({
+          nazwa: r.nazwa,
+          wynik: r.wynik
+        }))
+      };
+
+      const { error: insertError } = await supabaseClient
+        .from('game_history')
+        .insert([gameRecord]);
+      
+      if (insertError) throw insertError;
+
+      // Aktualizuj highscores
+      for (const result of results) {
+        const { data: existing, error: selectError } = await supabaseClient
+          .from('highscores')
+          .select('*')
+          .eq('nazwa', result.nazwa)
+          .maybeSingle();
+
+        if (selectError) throw selectError;
+
+        if (existing) {
+          // Gracz istnieje - aktualizuj jeśli wynik wyższy
+          const newWynik = Math.max(existing.wynik, result.wynik);
+          const { error: updateError } = await supabaseClient
+            .from('highscores')
+            .update({
+              wynik: newWynik,
+              ilosc_partii: existing.ilosc_partii + 1,
+              updated_at: new Date().toISOString()
+            })
+            .eq('nazwa', result.nazwa);
+          
+          if (updateError) throw updateError;
+        } else {
+          // Nowy gracz
+          const { error: insertScoreError } = await supabaseClient
+            .from('highscores')
+            .insert([{
+              nazwa: result.nazwa,
+              wynik: result.wynik,
+              ilosc_partii: 1
+            }]);
+          
+          if (insertScoreError) throw insertScoreError;
+        }
+      }
+
+      // Zwiększ licznik gier
+      gameStats.totalGames++;
+      const { error: statsError } = await supabaseClient
+        .from('game_stats')
+        .update({ total_games: gameStats.totalGames })
+        .eq('id', 1);
+      
+      if (statsError) throw statsError;
+
+      // Załaduj zaktualizowane dane
+      await loadGameStats();
+
+    } catch (error) {
+      console.error('Błąd przy zapisie wyniku:', error);
+      showCenterTooltip('Błąd przy zapisie wyniku. Spróbuj ponownie.', 'error', 3000);
+      return;
     }
-  });
-  
-  // Sortuj highscores
-  gameStats.highscores.sort((a, b) => b.wynik - a.wynik);
-  
-  // Zapisz statystyki
-  saveGameStats();
-  
+
+    showGameEndModalUI(results);
+  })();
+}
+
+// Funkcja do prawidłowej infleksji słowa "punkt/punkty/punktów"
+function getPunktForm(n) {
+  const abs = Math.abs(n);
+  if (abs % 10 === 1 && abs % 100 !== 11) {
+    return 'punkt';
+  } else if (abs % 10 >= 2 && abs % 10 <= 4 && (abs % 100 < 12 || abs % 100 > 14)) {
+    return 'punkty';
+  } else {
+    return 'punktów';
+  }
+}
+
+
+// Weryfikacja PIN dla istniejącego gracza
+async function verifyPlayerPIN(playerName, enteredPin) {
+  try {
+    if (!supabaseClient) return false;
+    
+    const { data, error } = await supabaseClient
+      .from('highscores')
+      .select('pin')
+      .eq('nazwa', playerName)
+      .maybeSingle();
+    
+    if (error) throw error;
+    if (!data || !data.pin) return false;
+    
+    return data.pin === enteredPin;
+  } catch (error) {
+    console.error('Błąd weryfikacji PIN:', error);
+    return false;
+  }
+}
+
+// Zapisanie nowego gracza z PIN
+async function createNewPlayerWithPIN(playerName, pin) {
+  try {
+    if (!supabaseClient) return false;
+    
+    const { error } = await supabaseClient
+      .from('highscores')
+      .insert([{
+        nazwa: playerName,
+        wynik: 0,
+        ilosc_partii: 0,
+        pin: pin
+      }]);
+    
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Błąd przy tworzeniu nowego gracza:', error);
+    return false;
+  }
+}
+
+function showGameEndModalUI(results) {
   // Stwórz modal
   const modal = document.createElement('div');
   modal.className = 'game-end-modal';
@@ -1202,7 +1752,7 @@ function showGameEndModal() {
   const statsDiv = document.createElement('div');
   statsDiv.className = 'game-stats-summary';
   const totalGamesText = document.createElement('p');
-  totalGamesText.innerHTML = `<strong>Razem partii:</strong> ${gameStats.totalGames}`;
+  totalGamesText.innerHTML = `<strong>Zakończono partię:</strong> ${gameStats.totalGames}`;
   statsDiv.appendChild(totalGamesText);
   modalContent.appendChild(statsDiv);
   
@@ -1217,12 +1767,14 @@ function showGameEndModal() {
   if (winners.length > 1) {
     // Remis
     const winnerNames = winners.map(w => w.nazwa).join(', ');
-    resultText.innerHTML = `🤝 <strong>REMIS!</strong><br><strong>${winnerNames}</strong><br>wszyscy mają <strong>${maxScore}</strong> punktów`;
+    const punktForm = getPunktForm(maxScore);
+    resultText.innerHTML = `🤝 <strong>REMIS!</strong><br><strong>${winnerNames}</strong><br>wszyscy mają <strong>${maxScore}</strong> ${punktForm}`;
   } else {
     // Jedna osoba wygrała
     const winner = winners[0];
     const advantage = winner.wynik - (runnerUp ? runnerUp.wynik : 0);
-    resultText.innerHTML = `<strong>${winner.nazwa}</strong> wygrywa z wynikiem <strong>${winner.wynik}</strong> punktów<br>Przewaga: <strong>+${advantage}</strong> punkty`;
+    const punktForm = getPunktForm(advantage);
+    resultText.innerHTML = `<strong>${winner.nazwa}</strong> wygrywa z wynikiem <strong>${winner.wynik}</strong> ${getPunktForm(winner.wynik)}<br>Przewaga: <strong>+${advantage}</strong> ${punktForm}`;
   }
   
   modalContent.appendChild(resultText);
@@ -1296,6 +1848,10 @@ function showInlineConfirmTwoOptions(message, opt1Label, opt2Label, onOpt1, onOp
   box.style.borderRadius = '8px';
   box.style.backgroundColor = 'white';
   box.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.2)';
+  // CSS centering - zawsze będzie na środku ekranu
+  box.style.left = '50%';
+  box.style.top = '50%';
+  box.style.transform = 'translate(-50%, -50%)';
 
   const msg = document.createElement('div');
   msg.className = 'inline-confirm-msg';
@@ -1323,11 +1879,6 @@ function showInlineConfirmTwoOptions(message, opt1Label, opt2Label, onOpt1, onOp
   box.appendChild(actions);
 
   document.body.appendChild(box);
-
-  // center
-  const brect = box.getBoundingClientRect();
-  box.style.left = Math.round((window.innerWidth - brect.width) / 2) + 'px';
-  box.style.top = Math.round((window.innerHeight - brect.height) / 2) + 'px';
 
   setTimeout(() => opt1.focus(), 0);
 
@@ -1420,7 +1971,7 @@ function showStatsPanel() {
   gameStats.highscores.forEach((hs, idx) => {
     const row = tbody.insertRow();
     const wins = winsMap[hs.nazwa] || 0;
-    row.innerHTML = `<td>${idx + 1}</td><td>${hs.nazwa}</td><td><strong>${hs.wynik}</strong></td><td>${wins}</td><td>${hs.iloscPartii}</td>`;
+    row.innerHTML = `<td>${idx + 1}</td><td>${hs.nazwa}</td><td><strong>${hs.wynik}</strong></td><td>${wins}</td><td>${hs.ilosc_partii}</td>`;
   });
 
   hsWrapper.appendChild(hsTable);

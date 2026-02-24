@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>Gra w Kości – karta punktów</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -18,7 +19,7 @@
   <div id="etap-nazwy" style="display:none;">
     <h2>Nazwy graczy</h2>
     <div id="nazwa-inputs"></div>
-    <button onclick="etapStartowania()">Dalej</button>
+    <button onclick="validateAndProceedToStart()">Dalej</button>
   </div>
   
   <div id="etap-start" style="display:none;">
