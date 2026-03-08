@@ -1462,8 +1462,14 @@ function zapisz(wartosc) {
     let autoAddBonus = false;
 
     // Pola 1-6 ze wartościami 5,10,15,20,25,30 -> zawsze generał, auto +100
-    if (polaOdJedynekDoSzostek.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
+    // Specjalna logika dla Piątek – generał tylko przy 25
+    if (pole === "Piątki" && wartosc === 25) {
       autoAddBonus = true;
+    }
+    // Pozostałe pola 1–6 (bez Piątek)
+    else if (pole !== "Piątki" && polaOdJedynekDoSzostek.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
+      autoAddBonus = true;
+    }
     } else if (polesWith5OfAKind.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
       needsConfirm = true;
       confirmMessage = 'Czy to jest generał (5 jednakowych)?\nDodać +100 do głównego generała?';
