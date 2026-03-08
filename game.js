@@ -1469,7 +1469,6 @@ function zapisz(wartosc) {
     // Pozostałe pola 1–6 (bez Piątek)
     else if (pole !== "Piątki" && polaOdJedynekDoSzostek.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
       autoAddBonus = true;
-    }
     } else if (polesWith5OfAKind.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
       needsConfirm = true;
       confirmMessage = 'Czy to jest generał (5 jednakowych)?\nDodać +100 do głównego generała?';
