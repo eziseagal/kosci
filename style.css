@@ -598,7 +598,7 @@ body.left-floating h1 {
 }
 
 .table-wrapper {
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: visible;
   background: white;
   border-radius: 8px;
@@ -609,7 +609,8 @@ body.left-floating h1 {
 
 table {
   border-collapse: collapse;
-  width: auto;
+  table-layout: fixed;
+  width: max-content;
   border: 3px solid #f0f0f0;
   background: white;
   border-radius: 8px;
@@ -636,34 +637,38 @@ tbody tr:last-child td:last-child {
 
 th {
   border: none;
-  padding: 14px 16px;
+  padding: 0; 
+  height: 48px; 
+  width: 110px; 
   text-align: center;
   background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
   color: white;
   font-weight: bold;
-  min-width: 110px;
   font-size: 1.02em;
   text-shadow: 0 1px 2px rgba(0,0,0,0.2);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+  box-sizing: border-box;
 }
 
 th:first-child {
   border-right: 2px solid #2c3e50;
+  width: 140px; 
 }
 
 td {
   border: 1px solid #e0e0e0;
-  padding: 13px 15px;
+  padding: 0; 
+  height: 45px; 
+  width: 110px; 
   text-align: center;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; 
   font-size: 1.05em;
   white-space: nowrap;
   font-weight: 500;
   color: #333;
-}
-
-td:not(:first-child) {
-  min-width: 110px;
+  box-sizing: border-box;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums; 
 }
 
 td.pole-gry {
@@ -674,6 +679,17 @@ td.pole-gry:not(.zablokowane):not(:first-child):hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255,255,255,0.5);
   background-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+td:first-child {
+  font-weight: 700;
+  background: linear-gradient(135deg, #f8f9fa 0%, #f0f0f0 100%);
+  border-right: 2px solid #2c3e50;
+  font-size: 0.95em;
+  color: #2c3e50;
+  width: 160px;
+  border-top: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
 }
 
 /* Pola górne */
@@ -809,17 +825,6 @@ tr[data-sum="RAZEM"] td:not(:first-child) {
 .inline-confirm.global-fixed .rematch-btn:hover,
 .inline-confirm.global .rematch-btn:hover {
   background: linear-gradient(135deg, #ffa726 0%, #fb8c00 100%) !important;
-}
-
-td:first-child {
-  font-weight: 700;
-  background: linear-gradient(135deg, #f8f9fa 0%, #f0f0f0 100%);
-  border-right: 2px solid #2c3e50;
-  font-size: 0.95em;
-  color: #2c3e50;
-  min-width: 140px;
-  border-top: 1px solid #e0e0e0;
-  border-bottom: 1px solid #e0e0e0;
 }
 
 .zablokowane {
@@ -1417,6 +1422,7 @@ input[type="number"]::-webkit-inner-spin-button {
 
 input[type="number"] {
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 /* Animation for inline messages */
