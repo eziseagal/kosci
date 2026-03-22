@@ -67,45 +67,155 @@ h1 {
   border-radius: 4px;
 }
 
+/* --- DRAG & DROP and ADDING/REMOVING PLAYERS --- */
+#start {
+  max-width: 660px; 
+}
+
 .nazwa-input {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  margin: 12px 0;
-  font-size: 1.1em;
+  margin: 10px 0;
+  font-size: 1rem; 
+  background: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  border: 1px solid #e0e0e0;
+  transition: box-shadow 0.2s, transform 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: grab;
+}
+
+.nazwa-input:active {
+  cursor: grabbing;
 }
 
 .nazwa-input label {
   font-weight: 600;
-  min-width: 120px;
+  min-width: 80px;
   color: #2c3e50;
-}
-
-.nazwa-input input {
-  width: 180px;
-  padding: 8px;
-  font-size: 1em;
+  flex-shrink: 0;
+  font-size: 1.1em;
+  cursor: inherit;
+  user-select: none;
 }
 
 .nazwa-input-container {
-  position: relative;
+  position: relative; 
+  flex-grow: 1;
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: text;
 }
 
-.nazwa-input-dropdown-btn {
-  background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
-  color: white;
-  border: none;
+.nazwa-input-container input {
+  width: 100%;
+  height: 42px; 
   padding: 8px 12px;
+  font-size: 1.05em; 
+  border: 2px solid #e0e0e0;
   border-radius: 6px;
-  cursor: pointer;
-  font-size: 1.2em;
-  transition: all 0.3s ease;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.nazwa-input-container input:focus {
+  outline: none;
+  border-color: #2196f3;
+}
+
+.nazwa-input.dragging {
+  opacity: 0.9;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+  transform: scale(1.02);
+  z-index: 10;
+  border-color: #2196f3;
+}
+
+.drag-handle {
+  color: #bbb;
+  font-size: 1.4em; 
+  padding-right: 4px;
+  user-select: none;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.2s;
+  cursor: inherit; /* Inherits the cursor from .input-name, so it becomes grab/grabbing */
+}
+
+.drag-handle:hover {
+  color: #2196f3;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* RED MINUS */
+.btn-remove-player {
+  background: linear-gradient(135deg, #f44336 0%, #e53935 100%);
+  color: #000000; 
+  border: 1px solid #d32f2f;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4em;
+  font-weight: 900; 
+  box-shadow: 0 2px 6px rgba(244, 67, 54, 0.3);
+  transition: all 0.2s ease;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.btn-remove-player:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 10px rgba(244, 67, 54, 0.4);
+}
+
+/* CONTAINER FOR "NEXT" BUTTON AND GREEN/YELLOW PLUS */
+.etap-actions-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 25px;
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+  width: 100%;
+}
+
+/* YELLOW PLUS */
+.btn-add-player {
+  order: 1;
+}
+
+.btn-add-player:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(251, 192, 45, 0.4);
+  background: linear-gradient(135deg, #fff176 0%, #fbc02d 100%);
+}
+
+.nazwa-input-dropdown-btn {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 6px !important;
+  font-size: 1.2em !important;
+  box-sizing: border-box !important;
 }
 
 .nazwa-input-dropdown-btn:hover {
@@ -115,18 +225,16 @@ h1 {
 
 .nazwa-input-dropdown {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 4px);
   left: 0;
+  width: 100%;
   background: white;
-  border: 2px solid #2196f3;
+  border: 2px solid #4caf50;
   border-radius: 6px;
-  min-width: 200px;
-  max-width: 250px;
-  max-height: 300px;
+  max-height: 250px;
   overflow-y: auto;
-  z-index: 1000;
-  margin-top: 4px;
-  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+  z-index: 2000 !important; 
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
   display: none;
 }
 
@@ -223,33 +331,113 @@ h1 {
   display: none;
 }
 
+/* --- FLOATING ACTION BUTTON (FAB) --- */
 #controls {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: 24px;
+  right: 24px;
   z-index: 2200;
-  display: flex;
-  gap: 12px;
-  flex-direction: column;
-  align-items: flex-end;
+  display: none; /* Shows with class .active */
 }
-#controls button {
-  padding: 12px 20px;
-  font-size: 1.05em;
-  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+
+#controls.aktywna {
+  display: block; /* Container for the menu */
+}
+
+/* MAIN FAB BUTTON */
+.fab-main {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
   color: white;
   border: none;
-  border-radius: 6px;
+  font-size: 28px;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
-  white-space: nowrap;
-  font-weight: 700;
-  transition: all 0.3s ease;
+  box-shadow: 0 4px 16px rgba(33, 150, 243, 0.4);
+  
+  /* Flexbox center the content, and line-height: 1 prevents "bumping" of emoji during rotation */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  line-height: 1; 
+  padding: 0;
+  
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 2;
+  position: relative;
 }
-#controls button:hover {
-  background: linear-gradient(135deg, #ee5a52 0%, #dc3c3c 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(255, 107, 107, 0.4);
+
+/* CLOSED STATE + HOVER */
+.fab-main:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(33, 150, 243, 0.5);
+}
+
+/* OPEN STATE */
+.fab-container.open .fab-main {
+  /* For rotation of 180 degrees, it looks the most natural */
+  transform: rotate(180deg); 
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+  box-shadow: 0 4px 16px rgba(255, 107, 107, 0.4);
+}
+
+/* CLOSED STATE + HOVER */
+.fab-container.open .fab-main:hover {
+  /* Connect the rotation and scale, so the button retains its "hover" size after clicking */
+  transform: rotate(180deg) scale(1.05); 
+  box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5);
+}
+
+/* HIDDEN OPTION MENU */
+.fab-menu {
+  position: absolute;
+  bottom: 80px;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(20px) scale(0.9);
+  transform-origin: bottom right;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+/* VISIBLE OPTION MENU */
+.fab-container.open .fab-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  pointer-events: auto; /* Allow clicks only when menu is visible */
+}
+
+/* SINGLE BUTTON IN THE MENU */
+.fab-action {
+  padding: 12px 20px;
+  border-radius: 30px;
+  background: white;
+  color: #2c3e50;
+  border: 2px solid transparent;
+  font-size: 1.05em;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.fab-action:hover {
+  background: #f8f9fa;
+  border-color: #2196f3;
+  color: #1976d2;
+  transform: translateX(-5px); 
+  box-shadow: 0 6px 16px rgba(33, 150, 243, 0.2);
 }
 
 #start h2 {
@@ -500,7 +688,7 @@ tr[data-pole="Szóstki"] td:not(:first-child) {
   font-weight: 600;
 }
 
-/* Suma górna i Premia */
+/* Upper sum and bonus */
 tr[data-sum="Suma górna"] td:not(:first-child),
 tr[data-sum="Premia"] td:not(:first-child) {
   background: linear-gradient(135deg, #81d4fa 0%, #4fc3f7 100%);
@@ -510,7 +698,7 @@ tr[data-sum="Premia"] td:not(:first-child) {
   box-shadow: inset 0 1px 2px rgba(255,255,255,0.3);
 }
 
-/* Pola dolne */
+/* Lower fields */
 tr[data-pole="Trzy jednakowe"] td:not(:first-child),
 tr[data-pole="Cztery jednakowe"] td:not(:first-child),
 tr[data-pole="Full"] td:not(:first-child),
@@ -523,7 +711,7 @@ tr[data-pole="Generał"] td:not(:first-child) {
   font-weight: 600;
 }
 
-/* Suma dolna */
+/* Lower sum */
 tr[data-sum="Suma dolna"] td:not(:first-child) {
   background: linear-gradient(135deg, #ce93d8 0%, #ba68c8 100%);
   font-weight: bold;
@@ -532,7 +720,7 @@ tr[data-sum="Suma dolna"] td:not(:first-child) {
   box-shadow: inset 0 1px 2px rgba(255,255,255,0.2);
 }
 
-/* RAZEM */
+/* TOTAL */
 tr[data-sum="RAZEM"] td:not(:first-child) {
   background: linear-gradient(135deg, #66bb6a 0%, #4caf50 100%);
   font-weight: bold;
@@ -652,7 +840,7 @@ td:first-child {
   position: fixed;
   left: 0;
   top: 0;
-  z-index: 2100;
+  z-index: 2210;
   pointer-events: auto;
 }
 
@@ -722,6 +910,22 @@ td:first-child {
   border: 1px solid #ddd;
   border-radius: 4px;
   background-color: #f9f9f9;
+}
+
+/* Force scrollbar visibility on macOS/Safari */
+.game-end-ranking::-webkit-scrollbar {
+  width: 8px;
+}
+.game-end-ranking::-webkit-scrollbar-track {
+  background: #e0e0e0;
+  border-radius: 4px;
+}
+.game-end-ranking::-webkit-scrollbar-thumb {
+  background: #b0b0b0;
+  border-radius: 4px;
+}
+.game-end-ranking::-webkit-scrollbar-thumb:hover {
+  background: #909090;
 }
 
 .option-btn {
@@ -891,6 +1095,22 @@ td.nieaktywny {
   min-width: 100%;
 }
 
+/* Force scrollbar visibility on macOS/Safari */
+.game-end-ranking::-webkit-scrollbar {
+  width: 8px;
+}
+.game-end-ranking::-webkit-scrollbar-track {
+  background: #e0e0e0;
+  border-radius: 4px;
+}
+.game-end-ranking::-webkit-scrollbar-thumb {
+  background: #b0b0b0;
+  border-radius: 4px;
+}
+.game-end-ranking::-webkit-scrollbar-thumb:hover {
+  background: #909090;
+}
+
 .ranking-row {
   display: flex;
   justify-content: space-between;
@@ -956,7 +1176,7 @@ td.nieaktywny {
  
 
 /* =======================
-   STATYSTYKI I HISTORIA
+   STATS AND HISTORY MODAL
 ======================= */
 .stats-modal {
   position: fixed;
@@ -1074,6 +1294,22 @@ td.nieaktywny {
   margin-bottom: 8px;
 }
 
+/* Force scrollbar visibility on macOS/Safari */
+.game-end-ranking::-webkit-scrollbar {
+  width: 8px;
+}
+.game-end-ranking::-webkit-scrollbar-track {
+  background: #e0e0e0;
+  border-radius: 4px;
+}
+.game-end-ranking::-webkit-scrollbar-thumb {
+  background: #b0b0b0;
+  border-radius: 4px;
+}
+.game-end-ranking::-webkit-scrollbar-thumb:hover {
+  background: #909090;
+}
+
 /* Keep header visible when scrolling highscores */
 .highscores-wrapper .stats-table thead th {
   position: sticky;
@@ -1172,7 +1408,7 @@ td.nieaktywny {
   box-shadow: 0 6px 16px rgba(244, 67, 54, 0.4);
 }
 
-/* Usunięcie spinner arrows z number input */
+/* Delete spinner arrows from number input */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -1183,7 +1419,7 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-/* Animacje dla wiadomości inline */
+/* Animation for inline messages */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -1228,7 +1464,7 @@ input[type="number"] {
   border-left: 4px solid #4caf50;
 }
 
-/* Tooltip dla komunikatów PIN */
+/* Tooltip for PIN messages */
 .pin-tooltip {
   position: fixed;
   color: white;
@@ -1251,7 +1487,7 @@ input[type="number"] {
   background: #4caf50;
 }
 
-/* Tooltip na środku ekranu dla globalnych komunikatów */
+/* Tooltip on the center of the screen for global messages */
 .center-tooltip {
   position: fixed;
   left: 50%;
@@ -1278,4 +1514,54 @@ input[type="number"] {
 
 .center-tooltip-success {
   background: #4caf50;
+}
+
+/* FORCE BUTTON COLORS */
+
+#etap-nazwy button.btn-remove-player {
+  background: linear-gradient(135deg, #f44336 0%, #e53935 100%) !important;
+  color: #ffffff !important; 
+  border: 2px solid #ffffff !important; 
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  box-shadow: 0 2px 6px rgba(244, 67, 54, 0.4) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+#etap-nazwy button.btn-remove-player:hover {
+  transform: scale(1.15) !important;
+  background: linear-gradient(135deg, #e53935 0%, #c62828 100%) !important;
+  box-shadow: 0 4px 10px rgba(244, 67, 54, 0.5) !important;
+}
+
+#etap-nazwy button.btn-add-player {
+  background: linear-gradient(135deg, #ffb74d 0%, #ff9800 100%) !important;
+  color: #5d2b00 !important;
+  border: 1px solid rgba(0,0,0,0.08) !important;
+  padding: 10px 20px !important;
+  border-radius: 6px !important;
+  font-size: 1.05em !important;
+  font-weight: 900 !important;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.25) !important;
+  text-shadow: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+#etap-nazwy button.btn-add-player:hover {
+  transform: translateY(-2px) !important;
+  background: linear-gradient(135deg, #ffa726 0%, #fb8c00 100%) !important;
+  box-shadow: 0 6px 16px rgba(255, 152, 0, 0.3) !important;
+}
+
+#etap-nazwy button[onclick="validateAndProceedToStart()"] {
+  order: 2; 
+  margin-left: auto !important; 
 }

@@ -1,17 +1,18 @@
 /* =======================
-   ZMIENNE GLOBALNE
+   GLOBAL VARIABLES
 ======================= */
 let aktywnyGracz = null;
 let aktywnaKomorka = null;
 let liczbaGraczy = 2;
 let nazwyGraczy = new Array(liczbaGraczy).fill("");
-let usedPlayerNames = []; // Lista nicków użytych w bieżącej grze
+let usedPlayerNames = []; // List of nicknames used in the current game
+let verifiedPlayersSession = new Set(); // List of verified nicknames in the current session
 
 let generałLicznik = [];
 let generałWynik = [];
-// Stos do cofania akcji
+// Stack for undoing actions
 let undoStack = [];
-// Numer aktualnej partii
+// Number of the current game, used for stats and history
 let currentGameNumber = 0;
 
 // SUPABASE
@@ -20,7 +21,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Yd4-7tGatl3FvmG1Y6C9Nw_Yj_nHs3C';
 
 let supabaseClient = null;
 
-// Inicjalizuj Supabase
+// Initialize Supabase
 async function initSupabase() {
   try {
     if (window.supabase && window.supabase.createClient) {
@@ -37,16 +38,16 @@ async function initSupabase() {
   }
 }
 
-// STATYSTYKI I HISTORIA
+// GAME STATS AND HISTORY
 let gameStats = {
   totalGames: 0,
   gameHistory: [],
   highscores: []
 };
 
-// Załaduj statystyki z Supabase
+// Load game stats from Supabase
 async function loadGameStats() {
-  // Jeśli Supabase nie zainicjalizowany, spróbuj go zainicjalizować
+  // If Supabase is not initialized, try to initialize it
   if (!supabaseClient) {
     const success = await initSupabase();
     if (!success) {
@@ -61,7 +62,7 @@ async function loadGameStats() {
   }
 
   try {
-    // Załaduj licznik gier
+    // Load game counter
     const { data: statsData, error: statsError } = await supabaseClient
       .from('game_stats')
       .select('total_games')
@@ -71,7 +72,7 @@ async function loadGameStats() {
     if (statsError) throw statsError;
     gameStats.totalGames = statsData?.total_games || 0;
 
-    // Załaduj ostatnich 50 gier
+    // Load the last 50 games
     const { data: historyData, error: historyError } = await supabaseClient
       .from('game_history')
       .select('date, results')
@@ -81,7 +82,7 @@ async function loadGameStats() {
     if (historyError) throw historyError;
     gameStats.gameHistory = historyData || [];
 
-    // Załaduj highscores (z PIN dla weryfikacji)
+    // Load highscores (with PIN for verification)
     const { data: highscoresData, error: highscoresError } = await supabaseClient
       .from('highscores')
       .select('nazwa, wynik, ilosc_partii, pin')
@@ -92,7 +93,7 @@ async function loadGameStats() {
 
   } catch (error) {
     console.error('Błąd przy ładowaniu statystyk:', error);
-    // Fallback na localStorage jeśli Supabase niedostępny
+    // Fallback to localStorage if Supabase unavailable
     const saved = localStorage.getItem('kosciGameStats');
     if (saved) {
       gameStats = JSON.parse(saved);
@@ -102,7 +103,7 @@ async function loadGameStats() {
   updateGameCounter();
 }
 
-// Zapisz statystyki do Supabase
+// Save game stats to Supabase
 async function saveGameStats() {
   if (!supabaseClient) {
     console.warn('Supabase not available, using localStorage only');
@@ -112,7 +113,7 @@ async function saveGameStats() {
   }
 
   try {
-    // Zaktualizuj licznik gier
+    // Update game counter
     const { error: updateError } = await supabaseClient
       .from('game_stats')
       .update({ total_games: gameStats.totalGames })
@@ -120,7 +121,7 @@ async function saveGameStats() {
     
     if (updateError) throw updateError;
     
-    // Zapamiętaj w localStorage jako backup
+    // Save in localStorage as a backup
     localStorage.setItem('kosciGameStats', JSON.stringify(gameStats));
   } catch (error) {
     console.error('Błąd przy zapisie statystyk:', error);
@@ -129,7 +130,7 @@ async function saveGameStats() {
   updateGameCounter();
 }
 
-// Aktualizuj wyświetlany licznik partii
+// Update the displayed game counter
 function updateGameCounter() {
   const counter = document.getElementById('total-games-counter');
   if (counter) {
@@ -138,7 +139,7 @@ function updateGameCounter() {
 }
 
 /* =======================
-   DEFINICJA PÓL
+    FIELD DEFINITION
 ======================= */
 const pola = {
   "Jedynki": gorne(1),
@@ -148,12 +149,12 @@ const pola = {
   "Piątki": gorne(5),
   "Szóstki": gorne(6),
 
-  "Trzy jednakowe": zakres(0, 30, 1),
-  "Cztery jednakowe": zakres(0, 30, 1),
+  "Trzy jednakowe": [0, ...zakres(5, 30, 1)],
+  "Cztery jednakowe": [0, ...zakres(5, 30, 1)],
   "Full": [0, 25],
   "Mały strit": [0, 30],
   "Duży strit": [0, 40],
-  "Szansa": zakres(0, 30, 1),
+  "Szansa": zakres(5, 30, 1),
   "Generał": [0, 50]
 };
 
@@ -169,7 +170,7 @@ const gornePola = [
 /* =======================
    START
 ======================= */
-// Czekaj aż dane się załadują, dopiero inicjalizuj interface
+// Wait for the data to load, then initialize the interface
 (async () => {
   await loadGameStats();
   init();
@@ -177,7 +178,7 @@ const gornePola = [
 })();
 
 /* =======================
-   INICJALIZACJA
+   INITIALIZATION
 ======================= */
 function initPlayerCountButtons() {
   const container = document.getElementById('liczba-graczy-buttons');
@@ -192,7 +193,7 @@ function initPlayerCountButtons() {
     container.appendChild(btn);
   }
   
-  // Obsługa klawiszy 1-0 do wyboru liczby graczy
+  // Support for 1-0 keys to select the number of players
   const handleKeyDown = (e) => {
     const key = e.key;
     let selectedNum = null;
@@ -216,12 +217,12 @@ function initPlayerCountButtons() {
 function init() {
   const tabela = document.getElementById("tabela");
   
-  // Wyczyść tabelę (zostaw tylko headers)
+  // Clear the table (leave only headers)
   while (tabela.rows.length > 1) {
     tabela.deleteRow(1);
   }
   
-  // Dodaj nagłówki dla każdego gracza
+  // Add headers for each player
   const headerRow = tabela.rows[0];
   while (headerRow.cells.length > 1) {
     headerRow.deleteCell(1);
@@ -239,7 +240,7 @@ function init() {
       const c = r.insertCell();
       c.classList.add("pole-gry");
       
-      // Hover efekt - tylko wizualna wskazówka
+      // Hover effect - visual cue only
       c.onmouseover = () => {
         if (!c.classList.contains("zablokowane") && g === aktywnyGracz) {
           c.style.opacity = "0.8";
@@ -250,13 +251,13 @@ function init() {
         c.style.opacity = "1";
       };
       
-      // Klik - aktywuj input edycji
+      // Click - activate edit input
       c.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (!c.classList.contains("zablokowane") && g === aktywnyGracz) {
           wybierzPole(pole, g, c);
-          // Ustaw fokus na polu wpisywania
+          // Set focus to the input field after a short delay to ensure it has been rendered
           setTimeout(() => {
             const input = document.querySelector('.input-liczby input');
             if (input) {
@@ -268,15 +269,15 @@ function init() {
       };
     }
     
-    // Po Szóstki dodaj Sumę górną i Premię
+    // After the Six, add the Top Sum and the Bonus
     if (pole === "Szóstki") {
-      // Najpierw premia, potem suma górna (premia będzie wliczona do sumy górnej)
+      // First the bonus, then the top sum (the bonus will be included in the top sum)
       dodajWiersz("Premia");
       dodajWiersz("Suma górna");
     }
   }
 
-  // PODSUMOWANIA - Reszta
+  // SUMMARY - Rest
   dodajWiersz("Suma dolna");
   dodajWiersz("RAZEM");
 }
@@ -292,17 +293,68 @@ function dodajWiersz(nazwa) {
 }
 
 /* =======================
-   ETAPY STARTU
+   FLOATING ACTION BUTTON (FAB)
+======================= */
+function initFAB() {
+  const fabToggle = document.getElementById('fabToggle');
+  const controlsContainer = document.getElementById('controls');
+
+  if (fabToggle && controlsContainer) {
+    // Switching the menu with the main button
+    fabToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      controlsContainer.classList.toggle('open');
+    });
+
+    // Closing the menu if the user clicks outside of it
+    document.addEventListener('mousedown', (e) => {
+      // Ignore if clicked on the menu itself or the confirmation modal (inline-confirm)
+      if (!controlsContainer.contains(e.target) && !e.target.closest('.inline-confirm')) {
+        controlsContainer.classList.remove('open');
+      }
+    });
+    
+    // Closing the menu after an option is selected (except 'Undo', which has a tooltip next to it)
+    const actions = controlsContainer.querySelectorAll('.fab-action');
+    actions.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.id !== 'btnUndo' && btn.id !== 'btnNewGame') {
+          controlsContainer.classList.remove('open');
+        }
+      });
+    });
+  }
+}
+
+// Run immediately
+initFAB();
+
+/* =======================
+   START STAGES - WITH DRAG & DROP MODIFICATIONS
 ======================= */
 
-// Sprawdź czy nazwa jest bazowa (Gracz 1, Gracz 2, itd.)
+// Check if the name is base (Player 1, Player 2, etc.)
 function isDefaultPlayerName(name) {
   return /^Gracz \d+$/i.test(name.trim());
 }
 
-function etapNazwy() {
-  // liczbaGraczy jest już ustawiona z kliknięcia przycisku
+function updatePlayerLabels() {
+  const rows = document.querySelectorAll('.nazwa-input');
+  liczbaGraczy = rows.length; // Update the global number of players
   
+  // Rebuild the array based on the physical order in the DOM
+  nazwyGraczy = Array.from(rows).map((row, index) => {
+    // Update the labels to always be in order (Player 1, Player 2...)
+    const label = row.querySelector('.player-label');
+    if (label) label.innerText = `Gracz ${index + 1}: `;
+    
+    // Update the array
+    const input = row.querySelector('input[type="text"]');
+    return input ? input.value.trim() : "";
+  });
+}
+
+function etapNazwy() {
   document.getElementById("etap-liczba").style.display = "none";
   document.getElementById("etap-nazwy").style.display = "block";
   
@@ -310,216 +362,400 @@ function etapNazwy() {
   inputsDiv.innerHTML = "";
   
   nazwyGraczy = new Array(liczbaGraczy).fill("");
-  usedPlayerNames = []; // Resetuj listę użytych nicków
+  usedPlayerNames = []; // Reset the list of used names
   
-  // Wyciągnij tylko graczy którzy mają zarejestrowany PIN (z tabeli highscores)
   const registeredPlayersArray = (gameStats.highscores || [])
     .map(hs => hs.nazwa)
     .sort((a, b) => a.localeCompare(b, 'pl'));
   
+  // Generate the initial rows
   for (let g = 0; g < liczbaGraczy; g++) {
-    const label = document.createElement("label");
-    label.innerText = `Gracz ${g + 1}: `;
-    
-    // Utwórz kontener z inputem i przyciskiem dropdown
-    const inputContainer = document.createElement("div");
-    inputContainer.className = "nazwa-input-container";
-    
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = "";
-    input.placeholder = `Wpisz nick`;
-    input.playerIndex = g;
-    
-    input.onchange = (e) => { 
-      nazwyGraczy[g] = e.target.value.trim(); 
-    };
-    
-    input.onblur = (e) => { 
-      // Nic - logika tylko na Enter
-    };
-    
-    input.onkeydown = async (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const newName = input.value.trim();
-        
-        // Sprawdź czy wprowadzono nazwę
-        if (!newName) {
-          showPINTooltip(input, '❌ Wprowadź nick!', 'error', 1500);
-          return;
-        }
-        
-        // Sprawdź czy nie jest bazową nazwą
-        if (isDefaultPlayerName(newName)) {
-          showPINTooltip(input, '❌ Wybierz unikalny nick!', 'error', 1500);
-          return;
-        }
-        
-        // Sprawdź czy nick już użyty w tej grze
-        if (usedPlayerNames.includes(newName) && newName !== nazwyGraczy[g]) {
-          showPINTooltip(input, '❌ Nick wybrano już!', 'error', 1500);
-          return;
-        }
-        
-        // Sprawdź czy to istniejący gracz
-        const isExistingPlayer = registeredPlayersArray.includes(newName);
-        
-        if (isExistingPlayer) {
-          // Istniejący gracz - weryfikacja PIN
-          const pinResult = await showInlinePINDialog(newName, true);
-          if (pinResult.cancelled) {
-            return;
-          }
-          // Weryfikuj PIN w bazie
-          const pinValid = await verifyPlayerPIN(newName, pinResult.pin);
-          if (!pinValid) {
-            showPINTooltip(input, '❌ Nieprawidłowy PIN!', 'error', 1500);
-            return;
-          }
-          nazwyGraczy[g] = newName;
-          usedPlayerNames.push(newName);
-          showPINTooltip(input, '✅ Zalogowano!', 'success', 1000);
-        } else {
-          // Nowy gracz - rejestracja PIN
-          const pinResult = await showInlinePINDialog(newName, false);
-          if (pinResult.cancelled) {
-            return;
-          }
-          // Zapisz nowego gracza
-          const saved = await createNewPlayerWithPIN(newName, pinResult.pin);
-          if (!saved) {
-            showPINTooltip(input, '❌ Błąd zapisu!', 'error', 1500);
-            return;
-          }
-          nazwyGraczy[g] = newName;
-          usedPlayerNames.push(newName);
-          showPINTooltip(input, '✅ Zarejestrowano!', 'success', 1000);
-        }
-        
-        input.value = nazwyGraczy[g];
-        
-        // Przejdź do następnego gracza
-        setTimeout(() => {
-          if (g === liczbaGraczy - 1) {
-            etapStartowania();
-          } else {
-            const nextInput = inputsDiv.querySelectorAll('input')[g + 1];
-            if (nextInput) nextInput.focus();
-          }
-        }, 500);
-      }
-    };
-    
-    // Przycisk dropdown
-    const dropdownBtn = document.createElement("button");
-    dropdownBtn.className = "nazwa-input-dropdown-btn";
-    dropdownBtn.innerText = "▼";
-    dropdownBtn.type = "button";
-    
-    // Dropdown z listą
-    const dropdown = document.createElement("div");
-    dropdown.className = "nazwa-input-dropdown";
-    
-    registeredPlayersArray.forEach(playerName => {
-      const item = document.createElement("div");
-      item.className = "nazwa-input-dropdown-item";
-      item.innerText = playerName;
-      item.onclick = async (e) => {
-        e.stopPropagation();
-        
-        // Sprawdź czy nick już użyty w tej grze
-        if (usedPlayerNames.includes(playerName)) {
-          showPINTooltip(input, '❌ Nick już wybrany!', 'error', 1500);
-          return;
-        }
-        
-        // Weryfikacja PIN dla istniejącego gracza
-        const pinResult = await showInlinePINDialog(playerName, true);
-        if (pinResult.cancelled) {
-          return;
-        }
-        // Weryfikuj PIN w bazie
-        const pinValid = await verifyPlayerPIN(playerName, pinResult.pin);
-        if (!pinValid) {
-          showPINTooltip(input, '❌ Nieprawidłowy PIN!', 'error', 1500);
-          return;
-        }
-        
-        input.value = playerName;
-        nazwyGraczy[g] = playerName;
-        usedPlayerNames.push(playerName);
-        dropdown.classList.remove("aktywny");
-        input.focus();
-      };
-      dropdown.appendChild(item);
-    });
-    
-    // Toggle dropdown
-    dropdownBtn.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dropdown.classList.toggle("aktywny");
-    };
-    
-    // Zamknij dropdown przy kliknięciu poza
-    inputContainer.addEventListener("click", (e) => {
-      e.stopPropagation();
-    });
-    
-    inputContainer.appendChild(input);
-    if (registeredPlayersArray.length > 0) {
-      inputContainer.appendChild(dropdownBtn);
-    }
-    inputContainer.appendChild(dropdown);
-    
-    const div = document.createElement("div");
-    div.className = "nazwa-input";
-    div.appendChild(label);
-    div.appendChild(inputContainer);
-    inputsDiv.appendChild(div);
+    inputsDiv.appendChild(createPlayerRow(registeredPlayersArray));
   }
-  
-  // Zamknij wszystkie dropdowny przy kliknięciu poza
-  const handleClickOutside = (e) => {
-    const dropdowns = inputsDiv.querySelectorAll('.nazwa-input-dropdown');
-    dropdowns.forEach(dp => {
-      if (!dp.parentElement.contains(e.target)) {
-        dp.classList.remove('aktywny');
-      }
-    });
-  };
+  updatePlayerLabels();
+  setupDragAndDrop(inputsDiv);
+
+  // Add the "Plus" button at the bottom (if it doesn't exist yet)
+  let actionContainer = document.getElementById("etap-nazwy-actions");
+  if (!actionContainer) {
+    actionContainer = document.createElement("div");
+    actionContainer.id = "etap-nazwy-actions";
+    actionContainer.className = "etap-actions-wrapper";
+
+    const addBtn = document.createElement("button");
+    addBtn.innerHTML = `Dodaj gracza <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`;    addBtn.title = "Dodaj kolejnego gracza na koniec listy";
+    addBtn.className = "btn-add-player";
+    addBtn.type = "button";
+    addBtn.onclick = (e) => {
+      e.preventDefault();
+      inputsDiv.appendChild(createPlayerRow(registeredPlayersArray));
+      updatePlayerLabels();
+    };
+    
+    const etapNazwyDiv = document.getElementById("etap-nazwy");
+    const dalejBtn = etapNazwyDiv.querySelector('button[onclick="validateAndProceedToStart()"]');
+    
+    // Fold the strip at the bottom
+    etapNazwyDiv.insertBefore(actionContainer, dalejBtn);
+    actionContainer.appendChild(dalejBtn);
+    actionContainer.appendChild(addBtn);   
+  } else {
+    actionContainer.style.display = "flex";
+  }
   document.addEventListener('click', handleClickOutside, true);
   
-  // Ustaw fokus na pierwszym inputie
+  // Set focus on the first input
   setTimeout(() => {
     const firstInput = inputsDiv.querySelector('input');
     if (firstInput) firstInput.focus();
   }, 0);
 }
 
-// Inline wiadomość nad inputem
+// Creates a single player row with drag and drop functionality and a minus button
+// Creates a single player row
+function createPlayerRow(registeredPlayersArray) {
+  const div = document.createElement("div");
+  div.className = "nazwa-input";
+
+  div.addEventListener('dragstart', () => {
+    div.classList.add('dragging');
+    document.querySelectorAll('.nazwa-input-dropdown.aktywny').forEach(d => d.classList.remove('aktywny'));
+  });
+  
+  div.addEventListener('dragend', () => {
+    div.classList.remove('dragging');
+    div.draggable = false; // Disable dragging after dropping
+    updatePlayerLabels(); 
+  });
+
+  const dragHandle = document.createElement("div");
+  dragHandle.className = "drag-handle";
+  dragHandle.innerHTML = "⠿";
+  
+  // Enable dragging when clicking the mouse/touching the row...
+  div.addEventListener('mousedown', (e) => {
+    // ...UNLESS you click on the input field, buttons, or the dropdown!
+    const isInteractive = e.target.closest('input, button, .nazwa-input-dropdown');
+    if (!isInteractive) {
+      div.draggable = true;
+    }
+  });
+  
+  // Disable dragging after releasing the mouse button, to prevent blocking the interface
+  div.addEventListener('mouseup', () => {
+    div.draggable = false;
+  });
+
+  const label = document.createElement("label");
+  label.className = "player-label";
+
+  const inputContainer = document.createElement("div");
+  inputContainer.className = "nazwa-input-container";
+
+  // Required previous declaration of dropdown for filtering
+  const dropdownBtn = document.createElement("button");
+  dropdownBtn.className = "nazwa-input-dropdown-btn";
+  dropdownBtn.innerText = "▼";
+  dropdownBtn.type = "button";
+  
+  const dropdown = document.createElement("div");
+  dropdown.className = "nazwa-input-dropdown";
+  
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = "";
+  input.placeholder = `Wpisz nick`;
+  
+  let lastValidName = ""; 
+  
+  // Build the list items
+  registeredPlayersArray.forEach(playerName => {
+    const item = document.createElement("div");
+    item.className = "nazwa-input-dropdown-item";
+    item.innerText = playerName;
+    item.dataset.name = playerName;
+    item.onclick = async (e) => {
+      e.stopPropagation();
+      dropdown.classList.remove("aktywny"); // Close the dropdown immediately
+      
+      updatePlayerLabels();
+      
+      if (usedPlayerNames.includes(playerName) && lastValidName !== playerName) {
+        showPINTooltip(input, '❌ Nick już wybrany!', 'error', 1500);
+        return;
+      }
+      
+      // Check in the session
+      if (!verifiedPlayersSession.has(playerName)) {
+        const pinResult = await showInlinePINDialog(playerName, true);
+        if (pinResult.cancelled) return;
+        
+        const pinValid = await verifyPlayerPIN(playerName, pinResult.pin);
+        if (!pinValid) {
+          showPINTooltip(input, '❌ Nieprawidłowy PIN!', 'error', 1500);
+          return;
+        }
+        verifiedPlayersSession.add(playerName); // Save to session
+      }
+      
+      if (lastValidName && usedPlayerNames.includes(lastValidName)) {
+        usedPlayerNames = usedPlayerNames.filter(n => n !== lastValidName);
+      }
+      
+      input.value = playerName;
+      usedPlayerNames.push(playerName);
+      lastValidName = playerName;
+      updatePlayerLabels();
+      showPINTooltip(input, '✅ Zalogowano!', 'success', 1000);
+      focusNextElementAfter(input); // Auto skip to the end
+    };
+    dropdown.appendChild(item);
+  });
+  
+  // 1. Common filter function (hides used nicknames and those that do not match the entered phrase)
+  const filterDropdownItems = () => {
+    const filterText = input.value.trim().toLowerCase();
+    const items = dropdown.querySelectorAll('.nazwa-input-dropdown-item');
+    let hasVisible = false;
+
+    items.forEach(item => {
+      const name = item.innerText; // We get the player's name from the element
+      // We check: whether it matches the text AND whether it is not already taken by someone else in this session
+      const isAlreadyUsed = usedPlayerNames.includes(name) && name !== lastValidName;
+      const matchesFilter = name.toLowerCase().includes(filterText);
+
+      if (matchesFilter && !isAlreadyUsed) {
+        item.style.display = '';
+        hasVisible = true;
+      } else {
+        item.style.display = 'none';
+      }
+    });
+    return hasVisible;
+  };
+
+  // 2. Handling text input
+  input.addEventListener('input', (e) => {
+    const val = e.target.value.trim();
+    
+    // Freeing the name from the 'used' list, if the user starts editing it
+    if (lastValidName && lastValidName !== val && usedPlayerNames.includes(lastValidName)) {
+        usedPlayerNames = usedPlayerNames.filter(n => n !== lastValidName);
+        lastValidName = "";
+    }
+
+    const hasVisible = filterDropdownItems(); // Refresh the visibility of elements
+
+    // Automatically show the list when something is typed and there are matching players
+    if (val.length > 0 && hasVisible) {
+      document.querySelectorAll('.nazwa-input-dropdown.aktywny').forEach(d => {
+        if (d !== dropdown) d.classList.remove('aktywny');
+      });
+      dropdown.classList.add("aktywny");
+    } else {
+      dropdown.classList.remove("aktywny");
+    }
+  });
+
+  // 3. Handling click and focus (shows suggestions immediately, if there is text in the field)
+  const showDropdownIfHasText = () => {
+    const hasVisible = filterDropdownItems();
+    if (input.value.trim().length > 0 && hasVisible) {
+      document.querySelectorAll('.nazwa-input-dropdown.aktywny').forEach(d => {
+        if (d !== dropdown) d.classList.remove('aktywny');
+      });
+      dropdown.classList.add("aktywny");
+    }
+  };
+
+  input.addEventListener('click', showDropdownIfHasText);
+  input.addEventListener('focus', showDropdownIfHasText);
+  
+  // Main confirmation with Enter key or auto-completion with Tab
+  input.onkeydown = async (e) => {
+    
+    // TAB KEY LOGIC (Autocomplete)
+    if (e.key === 'Tab') {
+      // Find all visible items in the list
+      const visibleItems = Array.from(dropdown.querySelectorAll('.nazwa-input-dropdown-item'))
+                                .filter(item => item.style.display !== 'none');
+      
+      // If the list is open and there is exactly one option available
+      if (dropdown.classList.contains("aktywny") && visibleItems.length === 1) {
+        e.preventDefault(); // Block the default tab navigation to the next field
+        visibleItems[0].click(); // Simulate a click on this single item (will trigger PIN and login)
+        return;
+      }
+    }
+
+    // ENTER KEY LOGIC (Standard Confirmation)
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const newName = input.value.trim();
+      
+      if (!newName) {
+        showPINTooltip(input, '❌ Wprowadź nick!', 'error', 1500);
+        return;
+      }
+      if (isDefaultPlayerName(newName)) {
+        showPINTooltip(input, '❌ Wybierz unikalny nick!', 'error', 1500);
+        return;
+      }
+      
+      updatePlayerLabels(); 
+      
+      const nameCount = nazwyGraczy.filter(n => n === newName).length;
+      if (nameCount > 1 || (usedPlayerNames.includes(newName) && lastValidName !== newName)) {
+        showPINTooltip(input, '❌ Nick wybrano już!', 'error', 1500);
+        return;
+      }
+      
+      const isExistingPlayer = registeredPlayersArray.includes(newName);
+      
+      if (isExistingPlayer) {
+        if (!verifiedPlayersSession.has(newName)) {
+          const pinResult = await showInlinePINDialog(newName, true);
+          if (pinResult.cancelled) return;
+          const pinValid = await verifyPlayerPIN(newName, pinResult.pin);
+          if (!pinValid) {
+            showPINTooltip(input, '❌ Nieprawidłowy PIN!', 'error', 1500);
+            return;
+          }
+          verifiedPlayersSession.add(newName);
+        }
+        if(lastValidName) usedPlayerNames = usedPlayerNames.filter(n => n !== lastValidName);
+        usedPlayerNames.push(newName);
+        lastValidName = newName;
+        showPINTooltip(input, '✅ Zalogowano!', 'success', 1000);
+      } else {
+        if (!verifiedPlayersSession.has(newName)) {
+          const pinResult = await showInlinePINDialog(newName, false);
+          if (pinResult.cancelled) return;
+          const saved = await createNewPlayerWithPIN(newName, pinResult.pin);
+          if (!saved) {
+            showPINTooltip(input, '❌ Błąd zapisu!', 'error', 1500);
+            return;
+          }
+          verifiedPlayersSession.add(newName);
+        }
+        if(lastValidName) usedPlayerNames = usedPlayerNames.filter(n => n !== lastValidName);
+        usedPlayerNames.push(newName);
+        lastValidName = newName;
+        showPINTooltip(input, '✅ Zarejestrowano!', 'success', 1000);
+      }
+      
+      input.value = newName;
+      updatePlayerLabels();
+      dropdown.classList.remove("aktywny"); // Close after using Enter
+      focusNextElementAfter(input); 
+    }
+  };
+  
+  // ARROW CLICK LOGIC
+  dropdownBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Filter based on what has been typed, before opening
+    const filterText = input.value.trim().toLowerCase();
+    const items = dropdown.querySelectorAll('.nazwa-input-dropdown-item');
+    items.forEach(item => {
+      if (item.innerText.toLowerCase().includes(filterText)) {
+        item.style.display = '';
+      } else {
+        item.style.display = 'none';
+      }
+    });
+
+    document.querySelectorAll('.nazwa-input-dropdown.aktywny').forEach(d => {
+        if(d !== dropdown) d.classList.remove('aktywny');
+    });
+    dropdown.classList.toggle("aktywny");
+  };
+  
+  inputContainer.addEventListener("click", (e) => e.stopPropagation());
+  inputContainer.appendChild(input);
+  if (registeredPlayersArray.length > 0) {
+    inputContainer.appendChild(dropdownBtn);
+  }
+  inputContainer.appendChild(dropdown);
+
+  // Button with precise vector minus
+  const removeBtn = document.createElement("button");
+  removeBtn.className = "btn-remove-player";
+  removeBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>`;
+  removeBtn.title = "Usuń gracza";
+  removeBtn.type = "button";
+  removeBtn.onclick = () => {
+     const rows = document.querySelectorAll('.nazwa-input');
+     if (rows.length <= 1) {
+        showCenterTooltip("Gra wymaga minimum 1 gracza!", "error", 2000);
+        return;
+     }
+     if (lastValidName && usedPlayerNames.includes(lastValidName)) {
+         usedPlayerNames = usedPlayerNames.filter(n => n !== lastValidName);
+     }
+     div.remove();
+     updatePlayerLabels();
+  };
+
+  div.appendChild(dragHandle);
+  div.appendChild(label);
+  div.appendChild(inputContainer);
+  div.appendChild(removeBtn);
+  
+  return div;
+}
+
+// Drag & Drop container logic
+function setupDragAndDrop(container) {
+  container.addEventListener('dragover', e => {
+    e.preventDefault();
+    const afterElement = getDragAfterElement(container, e.clientY);
+    const draggable = document.querySelector('.dragging');
+    if (draggable) {
+      if (afterElement == null) {
+        container.appendChild(draggable);
+      } else {
+        container.insertBefore(draggable, afterElement);
+      }
+    }
+  });
+}
+
+// Finds the element over which the mouse is positioned when dropping
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.nazwa-input:not(.dragging)')];
+
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    } else {
+      return closest;
+    }
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+// Inline message above the input
 function showPINTooltip(inputElement, message, type = 'error', duration = 1500) {
-  // Usuń stary tooltip
+  // Remove the existing tooltip
   const existing = document.querySelector('.pin-tooltip');
   if (existing) existing.remove();
   
-  // Oblicz pozycję PRZED dodaniem do DOM
+  // Calculate the position BEFORE adding to the DOM
   const rect = inputElement.getBoundingClientRect();
-  
   const tooltip = document.createElement('div');
   tooltip.className = `pin-tooltip pin-tooltip-${type}`;
   tooltip.innerText = message;
-  
-  // Dodaj tymczasowo żeby zmierzyć szerokość
   tooltip.style.visibility = 'hidden';
   document.body.appendChild(tooltip);
-  
+
   const tooltipWidth = tooltip.offsetWidth;
   const tooltipLeft = rect.left + rect.width / 2 - tooltipWidth / 2;
   const tooltipTop = rect.top - 40;
   
-  // Ustaw właściwą pozycję
   tooltip.style.visibility = 'visible';
   tooltip.style.left = tooltipLeft + 'px';
   tooltip.style.top = tooltipTop + 'px';
@@ -529,9 +765,9 @@ function showPINTooltip(inputElement, message, type = 'error', duration = 1500) 
   }
 }
 
-// Tooltip na środku ekranu dla globalnych komunikatów
+// Tooltip in the middle of the screen for global messages
 function showCenterTooltip(message, type = 'error', duration = 2500) {
-  // Usuń stary tooltip
+  // Remove the existing tooltip
   const existing = document.querySelector('.center-tooltip');
   if (existing) existing.remove();
   
@@ -542,7 +778,7 @@ function showCenterTooltip(message, type = 'error', duration = 2500) {
   
   document.body.appendChild(tooltip);
   
-  // Pokaż tooltip po dodaniu do DOM
+  // Show tooltip after adding to DOM
   setTimeout(() => {
     tooltip.style.opacity = '1';
   }, 10);
@@ -556,7 +792,7 @@ function showCenterTooltip(message, type = 'error', duration = 2500) {
 }
 
 function showInlineMessage(inputElement, message, type = 'error', duration = 2000) {
-  // Usuń starą wiadomość
+  // Remove the existing message
   const existing = inputElement.parentElement.querySelector('.inline-message');
   if (existing) existing.remove();
   
@@ -577,92 +813,126 @@ function showInlineMessage(inputElement, message, type = 'error', duration = 200
 }
 
 // Inline PIN dialog
+// New, improved Inline PIN dialog (4 columns)
 async function showInlinePINDialog(playerName, isExisting) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 2500;';
+    overlay.className = 'pin-overlay';
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 2500; backdrop-filter: blur(3px);';
+    
+    // Close on background click
+    overlay.onmousedown = (e) => {
+      if (e.target === overlay) {
+        overlay.remove();
+        resolve({ pin: null, cancelled: true });
+      }
+    };
     
     const box = document.createElement('div');
-    box.style.cssText = 'background: white; padding: 30px; border-radius: 10px; text-align: center; min-width: 320px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);';
+    box.style.cssText = 'background: white; padding: 30px; border-radius: 12px; text-align: center; min-width: 320px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); animation: fadeIn 0.2s ease-out;';
     
     const title = document.createElement('h3');
-    title.innerText = isExisting ? '🔐 Logowanie' : '🔐 Rejestracja PIN';
-    title.style.cssText = 'margin: 0 0 10px 0; color: #2c3e50;';
+    title.innerText = isExisting ? '🔐 Wprowadź PIN' : '🔐 Ustaw PIN';
+    title.style.cssText = 'margin: 0 0 10px 0; color: #2c3e50; font-size: 1.6em;';
     box.appendChild(title);
     
     const nameSpan = document.createElement('p');
     nameSpan.innerText = playerName;
-    nameSpan.style.cssText = 'font-size: 0.95em; color: #666; margin: 0 0 15px 0; font-weight: 600;';
+    nameSpan.style.cssText = 'font-size: 1.2em; color: #1976d2; margin: 0 0 25px 0; font-weight: bold;';
     box.appendChild(nameSpan);
     
-    const desc = document.createElement('p');
-    desc.innerText = isExisting ? 'Wpisz 4-cyfrowy PIN:' : 'Ustaw 4-cyfrowy PIN:';
-    desc.style.cssText = 'font-size: 0.9em; color: #999; margin: 0 0 12px 0;';
-    box.appendChild(desc);
+    // Container for the 4 columns
+    const inputsContainer = document.createElement('div');
+    inputsContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center; margin-bottom: 25px;';
     
-    const input = document.createElement('input');
-    input.type = 'password';
-    input.maxLength = '4';
-    input.placeholder = '****';
-    input.inputMode = 'numeric';
-    input.style.cssText = 'width: 100%; padding: 12px; font-size: 1.2em; text-align: center; letter-spacing: 5px; border: 2px solid #ddd; border-radius: 6px; margin: 0 0 15px 0; box-sizing: border-box;';
-    box.appendChild(input);
+    const inputs = [];
+    for (let i = 0; i < 4; i++) {
+      const input = document.createElement('input');
+      input.type = 'password';
+      input.maxLength = 1;
+      input.inputMode = 'numeric';
+      input.style.cssText = 'width: 55px; height: 65px; font-size: 2.2em; font-family: monospace; text-align: center; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; outline: none; transition: border-color 0.2s, box-shadow 0.2s;';
+      
+      input.onfocus = () => {
+        input.style.borderColor = '#2196f3';
+        input.style.boxShadow = '0 0 8px rgba(33, 150, 243, 0.3)';
+      };
+      input.onblur = () => {
+        input.style.borderColor = '#ddd';
+        input.style.boxShadow = 'none';
+      };
+      
+      input.oninput = (e) => {
+        // Wymuś tylko cyfry
+        input.value = input.value.replace(/[^0-9]/g, '');
+        
+        if (input.value.length === 1) {
+          if (i < 3) {
+            inputs[i + 1].focus();
+          } else {
+            submitPin();
+          }
+        }
+      };
+      
+      input.onkeydown = (e) => {
+        if (e.key === 'Backspace' && input.value === '' && i > 0) {
+          inputs[i - 1].focus();
+          inputs[i - 1].value = '';
+        }
+        if (e.key === 'Escape') {
+          overlay.remove();
+          resolve({ pin: null, cancelled: true });
+        }
+      };
+      
+      inputsContainer.appendChild(input);
+      inputs.push(input);
+    }
+    box.appendChild(inputsContainer);
     
-    const buttonDiv = document.createElement('div');
-    buttonDiv.style.cssText = 'display: flex; gap: 10px;';
-    
-    const okBtn = document.createElement('button');
-    okBtn.innerText = 'OK';
-    okBtn.style.cssText = 'flex: 1; padding: 10px; background: #2196f3; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;';
-    okBtn.onmouseover = () => okBtn.style.background = '#1976d2';
-    okBtn.onmouseout = () => okBtn.style.background = '#2196f3';
-    okBtn.onclick = () => {
-      const pin = input.value.trim();
-      if (pin.length !== 4 || !/^\d+$/.test(pin)) {
-        showPINTooltip(input, '❌ PIN musi zawierać 4 cyfry!', 'error', 2000);
-        return;
-      }
-      overlay.remove();
-      resolve({ pin, cancelled: false });
-    };
-    buttonDiv.appendChild(okBtn);
-    
-    const cancelBtn = document.createElement('button');
-    cancelBtn.innerText = 'Anuluj';
-    cancelBtn.style.cssText = 'flex: 1; padding: 10px; background: #f44336; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;';
-    cancelBtn.onmouseover = () => cancelBtn.style.background = '#d32f2f';
-    cancelBtn.onmouseout = () => cancelBtn.style.background = '#f44336';
-    cancelBtn.onclick = () => {
-      overlay.remove();
-      resolve({ pin: null, cancelled: true });
-    };
-    buttonDiv.appendChild(cancelBtn);
-    
-    box.appendChild(buttonDiv);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     
-    input.focus();
-    input.onkeydown = (e) => {
-      if (e.key === 'Enter') okBtn.click();
-      if (e.key === 'Escape') cancelBtn.click();
-    };
+    setTimeout(() => inputs[0].focus(), 50);
+    
+    function submitPin() {
+      const pin = inputs.map(i => i.value).join('');
+      if (pin.length === 4) {
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+          overlay.remove();
+          resolve({ pin, cancelled: false });
+        }, 150);
+      }
+    }
   });
 }
 
-// Waliduj wszystkie nazwy graczy i upewnij się że mają PIN
+// Helper function: Jumps to the next player or the 'Next' button
+function focusNextElementAfter(currentInput) {
+  setTimeout(() => {
+    const allInputs = Array.from(document.getElementById("nazwa-inputs").querySelectorAll('input[type="text"]'));
+    const currentIndex = allInputs.indexOf(currentInput);
+    if (currentIndex !== -1 && currentIndex < allInputs.length - 1) {
+      allInputs[currentIndex + 1].focus();
+    } else {
+      const dalejBtn = document.querySelector('#etap-nazwy button[onclick="validateAndProceedToStart()"]');
+      if (dalejBtn) dalejBtn.focus();
+    }
+  }, 100);
+}
+
+// Validate all player names and ensure they have a PIN (considering sessions)
 async function validateAndProceedToStart() {
-  // Sprawdź czy wszystkie nazwy są wypełnione i unikalne
+  updatePlayerLabels();
+
   for (let i = 0; i < liczbaGraczy; i++) {
     const playerName = nazwyGraczy[i];
-    
-    // Sprawdź czy nazwa jest pusta
     if (!playerName || playerName.trim() === '') {
       showCenterTooltip(`Gracz ${i + 1}: Wprowadź nick przed przejściem dalej!`, 'error', 2500);
       return;
     }
-    
-    // Sprawdź czy nazwa nie jest bazowa
     if (isDefaultPlayerName(playerName)) {
       showCenterTooltip(`Gracz ${i + 1}: Wybierz unikalny nick zamiast "${playerName}"!`, 'error', 2500);
       return;
@@ -673,47 +943,42 @@ async function validateAndProceedToStart() {
     .map(hs => hs.nazwa)
     .sort((a, b) => a.localeCompare(b, 'pl'));
   
-  // Sprawdź każdego gracza i zapewnij PIN
   for (let i = 0; i < liczbaGraczy; i++) {
     const playerName = nazwyGraczy[i];
     
-    // Jeśli gracz nie został przetworzony przez Enter (nie ma w usedPlayerNames)
     if (!usedPlayerNames.includes(playerName)) {
       const isExisting = registeredPlayersArray.includes(playerName);
       
       if (isExisting) {
-        // Istniejący gracz - wymaga PIN
-        const pinResult = await showInlinePINDialog(playerName, true);
-        if (pinResult.cancelled) {
-          return; // Anulowano - nie przechodź dalej
+        if (!verifiedPlayersSession.has(playerName)) {
+          const pinResult = await showInlinePINDialog(playerName, true);
+          if (pinResult.cancelled) return; 
+          
+          const pinValid = await verifyPlayerPIN(playerName, pinResult.pin);
+          if (!pinValid) {
+            showCenterTooltip('Nieprawidłowy PIN dla gracza: ' + playerName, 'error', 2500);
+            return; 
+          }
+          verifiedPlayersSession.add(playerName);
         }
-        
-        const pinValid = await verifyPlayerPIN(playerName, pinResult.pin);
-        if (!pinValid) {
-          showCenterTooltip('Nieprawidłowy PIN dla gracza: ' + playerName, 'error', 2500);
-          return; // Nie przechodź dalej
-        }
-        
         usedPlayerNames.push(playerName);
       } else {
-        // Nowy gracz - wymaga rejestracji PIN
-        const pinResult = await showInlinePINDialog(playerName, false);
-        if (pinResult.cancelled) {
-          return; // Anulowano - nie przechodź dalej
+        if (!verifiedPlayersSession.has(playerName)) {
+          const pinResult = await showInlinePINDialog(playerName, false);
+          if (pinResult.cancelled) return; 
+          
+          const saved = await createNewPlayerWithPIN(playerName, pinResult.pin);
+          if (!saved) {
+            showCenterTooltip('Błąd przy zapisywaniu gracza: ' + playerName, 'error', 2500);
+            return; 
+          }
+          verifiedPlayersSession.add(playerName);
         }
-        
-        const saved = await createNewPlayerWithPIN(playerName, pinResult.pin);
-        if (!saved) {
-          showCenterTooltip('Błąd przy zapisywaniu gracza: ' + playerName, 'error', 2500);
-          return; // Nie przechodź dalej
-        }
-        
         usedPlayerNames.push(playerName);
       }
     }
   }
   
-  // Wszyscy gracze zwalidowani - przejdź dalej
   etapStartowania();
 }
 
@@ -730,20 +995,37 @@ function etapStartowania() {
     btn.onclick = () => { aktywnyGracz = g; startGry(); };
     startDiv.appendChild(btn);
   }
+
+  const startBtn = document.querySelector('#etap-start button[onclick="startGry()"]');
+  if (startBtn) {
+    setTimeout(() => startBtn.focus(), 50);
+  }
 }
 
+  // Obsługa Entera na ekranie wyboru gracza startowego
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const etapStart = document.getElementById("etap-start");
+    // Check if we are currently on the start selection stage and the buttons are visible
+    if (etapStart && etapStart.style.display !== "none") {
+      // If the user hasn't selected a specific player, the game will randomly select the starting player (logic in startGry)
+      startGry();
+    }
+  }
+});
+
 /* =======================
-   START GRY
+   GAME START
 ======================= */
 function startGry() {
-  // Zresetuj tablice generałów
+  // Restart the game state
   generałLicznik = new Array(liczbaGraczy).fill(0);
   generałWynik = new Array(liczbaGraczy).fill(0);
   
-  // Ustaw numer aktualnej partii
+  // Set number of current game based on stats
   currentGameNumber = gameStats.totalGames + 1;
   
-  // Jeśli nie wybrano aktywnego gracza (np. kliknięto "Rozpocznij grę" bez wyboru), losuj startującego
+  // If the player didn't choose a specific starting player, randomly select one
   if (aktywnyGracz === null || typeof aktywnyGracz !== 'number') {
     aktywnyGracz = Math.floor(Math.random() * liczbaGraczy);
   }
@@ -765,7 +1047,7 @@ function startGry() {
 }
 
 /* =======================
-   TURA
+   ROUND
 ======================= */
 function aktualizujTure() {
   const nazwa = nazwyGraczy[aktywnyGracz];
@@ -787,7 +1069,7 @@ function aktualizujTure() {
 }
 
 /* =======================
-   WYBÓR POLA
+   ROUND SELECTION
 ======================= */
 function wybierzPole(pole, gracz, komorka) {
   if (gracz !== aktywnyGracz) return;
@@ -795,17 +1077,17 @@ function wybierzPole(pole, gracz, komorka) {
 
   const panel = document.getElementById("panel");
   
-  // Jeśli panel był aktywny, czekaj aż transition się skończy
+  // If the panel is already open for this cell, just close it. If it's open for another cell, switch immediately without closing animation.
   if (panel.classList.contains("aktywny")) {
-    // Wyczyść zawartość zaraz (bez delay)
+    // Clear options and hide panel immediately for a smoother transition when switching between cells
     document.getElementById("opcje").innerHTML = "";
     panel.classList.remove("aktywny");
-    // Czekaj na koniec transition (0.2s) + mały margin
+    // Wait a moment for the panel to hide before opening the new one, to avoid visual glitches
     setTimeout(() => {
       openPanel(pole, gracz, komorka);
     }, 210);
   } else {
-    // Jeśli panel był zamknięty, otwórz od razu
+    // If the panel is not open, just open it immediately
     openPanel(pole, gracz, komorka);
   }
 }
@@ -819,12 +1101,12 @@ function openPanel(pole, gracz, komorka) {
 
   renderOpcje(pole);
   
-  // Wyrenderuj zawartość, potem pozycjonuj i pokaż
+  // Render the panel first, then position it, to ensure correct dimensions for positioning calculations
   setTimeout(() => {
-    // Pozycjonuj panel gdy zawartość jest już wyrenderowana
+    // Position panel when content is already rendered
     positionPanelNearCell(komorka);
     
-    // Dodaj klasę aktywny - panel pojawi się już na prawidłowym miejscu
+    // Add active class after a short delay to allow CSS transitions (like fade-in) to work smoothly
     panel.classList.add("aktywny");
     
     const input = document.querySelector(".input-liczby input");
@@ -836,7 +1118,7 @@ function openPanel(pole, gracz, komorka) {
   }, 50);
 }
 
-// Ustaw pozycję panelu obok podanej komórki, dbając o granice ekranu
+// Set the panel's position near the clicked cell, adjusting to stay within the viewport
 function positionPanelNearCell(komorka) {
   const panel = document.getElementById('panel');
   if (!komorka || !panel) return;
@@ -846,13 +1128,13 @@ function positionPanelNearCell(komorka) {
   const margin = 8;
   let left = crect.right + margin;
   
-  // jeśli nie mieści się po prawej, postaraj się po lewej
+  // if the panel would go off the right edge of the window, position it to the left of the cell instead
   if (left + prect.width > window.innerWidth - margin) {
     left = crect.left - prect.width - margin;
   }
   if (left < margin) left = margin;
 
-  // Wyrównaj pionowo względem komórki, ale mieszcz w oknie
+  // Align vertically relative to the cell, but keep within the window
   let top = crect.top;
   if (top + prect.height > window.innerHeight - margin) {
     top = window.innerHeight - prect.height - margin;
@@ -864,13 +1146,13 @@ function positionPanelNearCell(komorka) {
 }
 
 /* =======================
-   OPCJE
+   OPTIONS RENDERING
 ======================= */
 function renderOpcje(pole) {
   const box = document.getElementById("opcje");
   box.innerHTML = "";
 
-  // Dodaj input dla wpisania liczby
+  // Add input field for manual entry with validation
   const inputDiv = document.createElement("div");
   inputDiv.className = "input-liczby";
   const input = document.createElement("input");
@@ -907,7 +1189,7 @@ function renderOpcje(pole) {
   inputDiv.appendChild(input);
   box.appendChild(inputDiv);
 
-  // Przyciski opcji
+  // Options buttons
   const buttonsDiv = document.createElement("div");
   buttonsDiv.className = "options-grid";
   
@@ -920,7 +1202,7 @@ function renderOpcje(pole) {
   });
   box.appendChild(buttonsDiv);
 
-  // Filtr na żywo: pokazuj tylko opcje zawierające wpisany ciąg
+  // Live filtering of options based on input
   input.oninput = () => {
     const q = String(input.value).trim();
     const btns = buttonsDiv.querySelectorAll('.option-btn');
@@ -935,19 +1217,19 @@ function renderOpcje(pole) {
   };
 }
 
-// Zamknij panel gdy kliknę poza
+// Close the panel when clicking outside of it or the active cell
 document.addEventListener('mousedown', (e) => {
   const panel = document.getElementById('panel');
   if (!panel) return;
   
-  // Nie zamykaj panelu gdy klikam na komórkę gry (zaraz onclick otworzy nowy)
+  // Don't close the panel when I click on the game cell (onclick will open a new one)
   if (e.target.closest('td.pole-gry')) {
     return;
   }
   
   if (aktywnaKomorka && panel.classList.contains('aktywny')) {
     const { komorka } = aktywnaKomorka;
-    // Jeśli kliknie poza panelem I poza komórką, zamknij panel
+    // If I click outside the panel and the active cell, close the panel
     if (!panel.contains(e.target) && !komorka.contains(e.target)) {
       panel.classList.remove('aktywny');
       document.getElementById('opcje').innerHTML = '';
@@ -961,35 +1243,42 @@ document.addEventListener('mousedown', (e) => {
 ======================= */
 function undoLast() {
   if (undoStack.length === 0) return;
+  
   const snap = undoStack.pop();
-  // Przywróć wartości pola
-  const { cell, oldText, oldLocked, prevGenerałLicznik, prevGenerałWynik, prevActiveGracz, gracz, clearCellToEmpty } = snap;
+  const { 
+    cell, 
+    oldText, 
+    oldLocked, 
+    prevGenerałLicznik, 
+    prevGenerałWynik, 
+    prevActiveGracz, 
+    prevGeneralText, 
+    prevGeneralLocked,
+    gracz 
+  } = snap;
+
+  // 1. Restore the state of the clicked cell
   if (cell) {
-    // Jeśli snapshot wymusza wyczyszczenie pola (np. cofamy "zwykłego" generala), ustaw puste
-    if (clearCellToEmpty) {
-      cell.innerText = '';
-      cell.classList.remove('zablokowane');
-    } else {
-      cell.innerText = oldText;
-      if (oldLocked) cell.classList.add('zablokowane'); else cell.classList.remove('zablokowane');
-    }
+    cell.innerText = oldText;
+    if (oldLocked) cell.classList.add('zablokowane'); 
+    else cell.classList.remove('zablokowane');
   }
-  // Przywróć generala
+
+  // 2. Restore the Generał state (in case it was changed by the last action)
   if (prevGenerałLicznik) generałLicznik = prevGenerałLicznik.slice();
   if (prevGenerałWynik) generałWynik = prevGenerałWynik.slice();
   
-  // Przywróć komórkę Generału jeśli został zmieniony bonus
-  if (prevGenerałWynik && gracz !== undefined) {
+  // 3. Restore the appearance of the Generał cell (fixes the issue with the disappearing 0)
+  if (gracz !== undefined) {
     const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
     if (generalRow) {
       const generalCell = generalRow.cells[gracz + 1];
       if (generalCell) {
-        // Jeśli poprzednia wartość generała to 0, traktuj jako puste pole (tak jak w innych wierszach)
-        if (prevGenerałWynik[gracz] === 0) {
-          generalCell.innerText = '';
-          generalCell.classList.remove('zablokowane');
+        generalCell.innerText = prevGeneralText;
+        if (prevGeneralLocked) {
+          generalCell.classList.add('zablokowane');
         } else {
-          generalCell.innerText = prevGenerałWynik[gracz];
+          generalCell.classList.remove('zablokowane');
         }
       }
     }
@@ -1000,7 +1289,7 @@ function undoLast() {
   aktualizujTure();
 }
 
-// Handler wywoływany przez przycisk Cofnij (pokazuje potwierdzenie)
+// Handler for the "Undo" button, with confirmation if there are actions to undo
 function requestUndo(targetEl) {
   if (undoStack.length === 0) {
     if (targetEl) showInlineConfirmNear(targetEl, 'Brak akcji do cofnięcia.', () => {}, () => {});
@@ -1011,16 +1300,16 @@ function requestUndo(targetEl) {
   else showInlineConfirm('Cofnąć ostatnią akcję?', () => undoLast(), () => {});
 }
 
-// Rozpocznij nową grę - po potwierdzeniu
+// Reset the game - after confirmation
 function resetGame() {
-  // pokaż ekran startowy, zresetuj stany
-  // pokaż ekran startowy i ustaw go na pierwszy etap wyboru liczby graczy
+  // show the start screen and reset the states
+  // show the start screen and set it to the first stage of player count selection
   document.getElementById('start').style.display = 'block';
   document.getElementById('etap-liczba').style.display = 'block';
   document.getElementById('etap-nazwy').style.display = 'none';
   document.getElementById('etap-start').style.display = 'none';
   
-  // Ukryj elementy gry
+  // Hide game elements
   document.getElementById("tura").classList.remove("aktywna");
   document.getElementById("partia-nr").classList.remove("aktywna");
   document.getElementById("partia-nr").innerText = "";
@@ -1028,14 +1317,14 @@ function resetGame() {
   document.getElementById("controls").classList.remove("aktywna");
   
   const tabela = document.getElementById('tabela');
-  // usuń wszystkie wiersze poza nagłówkiem
+  // delete all rows except the header
   while (tabela.rows.length > 1) tabela.deleteRow(1);
-  // przywróć nagłówek
+  // restore the header
   const headerRow = tabela.rows[0];
   while (headerRow.cells.length > 1) headerRow.deleteCell(1);
-  // reset danych
+  // reset data
   aktywnyGracz = null;
-  // wyczyść ewentualne nazwy aby użytkownik wybrał nowe (pozostaw liczbę graczy)
+  // clear any existing names so the user can choose new ones (keep the number of players)
   nazwyGraczy = new Array(liczbaGraczy).fill("");
   aktywnaKomorka = null;
   generałLicznik = new Array(liczbaGraczy).fill(0);
@@ -1140,7 +1429,7 @@ function showInlineConfirmNearThreeOptions(targetEl, message, opt1Label, opt2Lab
   setTimeout(() => document.addEventListener('mousedown', onDocClick), 0);
 }
 
-// Obsłuż Ctrl+Z (cofnij)
+// Handle Ctrl+Z (undo)
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
     e.preventDefault();
@@ -1168,9 +1457,9 @@ function bindControlButtons() {
 // Bind immediately (script is at end of body) and also after starting/resetting game
 bindControlButtons();
 
-// Pokazuje fajny notification o błędzie (np. złą wartość)
+// Shows a nice notification about an error (e.g., invalid value)
 function showErrorNotification(message) {
-  // Usuń stary notification jeśli istnieje
+  // Remove the existing notification if it exists
   const existing = document.querySelector('.error-notification');
   if (existing) existing.remove();
 
@@ -1184,28 +1473,28 @@ function showErrorNotification(message) {
   
   document.body.appendChild(notification);
   
-  // Auto-hide po 3 sekundach
+  // Auto-hide after 3 seconds
   setTimeout(() => {
     notification.classList.add('fade-out');
     setTimeout(() => notification.remove(), 300);
   }, 3000);
   
-  // Kliknięcie na notification zamyka ją
+  // Clicking on the notification closes it
   notification.onclick = () => {
     notification.classList.add('fade-out');
     setTimeout(() => notification.remove(), 300);
   };
 }
 
-// Pokazuje wewnętrzne potwierdzenie w panelu (nie używa alert/confirm)
+// Shows an internal confirmation in the panel (doesn't use alert/confirm)
 function showInlineConfirm(message, onYes, onNo) {
-  // usuń istniejące globalne potwierdzenia
+  // remove existing global confirmations
   const existing = document.body.querySelector('.inline-confirm.global-fixed');
   if (existing) existing.remove();
   const existingOverlay = document.body.querySelector('.confirm-overlay');
   if (existingOverlay) existingOverlay.remove();
 
-  // Dodaj overlay - tło które będzie blokować interakcje z grą
+  // Add overlay - background that will block interactions with the game
   const overlay = document.createElement('div');
   overlay.className = 'confirm-overlay';
   overlay.style.position = 'fixed';
@@ -1216,7 +1505,7 @@ function showInlineConfirm(message, onYes, onNo) {
   overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
   overlay.style.zIndex = 2250;
   overlay.onclick = () => {
-    // Kliknięcie na overlay = odpowiedź "Nie"
+    // Clicking on the overlay = answer "No"
     if (box) box.remove();
     overlay.remove();
     if (onNo) onNo();
@@ -1267,7 +1556,7 @@ function showInlineConfirm(message, onYes, onNo) {
 
   document.body.appendChild(box);
 
-  // Pozycjonuj w centrum ekranu
+  // Position in the center of the screen
   const brect = box.getBoundingClientRect();
   const left = (window.innerWidth - brect.width) / 2;
   const top = (window.innerHeight - brect.height) / 2;
@@ -1275,7 +1564,7 @@ function showInlineConfirm(message, onYes, onNo) {
   box.style.left = Math.round(left) + 'px';
   box.style.top = Math.round(top) + 'px';
 
-  // Auto-focus "Tak" button i pozwól Enter/Escape
+  // Auto-focus "Tak" button and allow Enter to confirm it
   setTimeout(() => {
     yes.focus();
   }, 0);
@@ -1293,9 +1582,9 @@ function showInlineConfirm(message, onYes, onNo) {
   box.addEventListener('keydown', onBoxKeydown);
 }
 
-// Pokazuje potwierdzenie obok danego elementu (np. przycisku)
+// Shows a confirmation near a given element (e.g., a button)
 function showInlineConfirmNear(targetEl, message, onYes, onNo) {
-  // usuń istniejące globalne potwierdzenia
+  // remove existing global confirmations
   const existing = document.body.querySelector('.inline-confirm.global');
   if (existing) existing.remove();
 
@@ -1328,7 +1617,7 @@ function showInlineConfirmNear(targetEl, message, onYes, onNo) {
 
   document.body.appendChild(box);
 
-  // Pozycjonuj względem targetEl
+  // Position near the target element
   const rect = targetEl.getBoundingClientRect();
   const margin = 8;
   let left = rect.right + margin;
@@ -1347,12 +1636,12 @@ function showInlineConfirmNear(targetEl, message, onYes, onNo) {
   box.style.left = Math.round(left) + 'px';
   box.style.top = Math.round(top) + 'px';
 
-  // Auto-focus "Tak" button i pozwól Enter aby go zatwierdzić
+  // Auto-focus "Tak" button and allow Enter to confirm it
   setTimeout(() => {
     yes.focus();
   }, 0);
 
-  // Obsłuż Enter aby zatwierdzić (kliknięcie "Tak")
+  // Handle Enter to confirm (clicking "Tak")
   const onBoxKeydown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -1377,29 +1666,31 @@ function showInlineConfirmNear(targetEl, message, onYes, onNo) {
 }
 
 /* =======================
-   ZAPIS
+   SAVE SELECTION / END TURN
 ======================= */
 function zapisz(wartosc) {
   let { pole, gracz, komorka } = aktywnaKomorka;
   let wynik = wartosc;
 
+  // Map for upper section fields to their base values (e.g., "Trójki" -> 3) for easier bonus calculations
+  const mapaWartosciGorne = { 
+    "Jedynki": 1, "Dwójki": 2, "Trójki": 3, "Czwórki": 4, "Piątki": 5, "Szóstki": 6 
+  };
+
   function createSnapshot() {
-    // Jeśli komórka ma input, pobierz aktualną wartość stąd, inaczej z innerText
-    let oldTextValue = '';
-    const editContainer = komorka ? komorka.querySelector('.cell-edit-container') : null;
-    if (editContainer) {
-      const input = editContainer.querySelector('.cell-edit-input');
-      oldTextValue = input ? input.value : '';
-    } else {
-      oldTextValue = komorka ? komorka.innerText : '';
-    }
-    
+    // We retrieve the current state of the General cell for this player so that we can restore it
+    const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
+    const generalCell = generalRow ? generalRow.cells[gracz + 1] : null;
+
     return {
       pole,
       gracz,
       cell: komorka,
-      oldText: oldTextValue,
-      oldLocked: komorka ? komorka.classList.contains('zablokowane') : false,
+      oldText: komorka.innerText,
+      oldLocked: komorka.classList.contains('zablokowane'),
+      // Same for the General cell, we need to save its state because it can be modified by the bonus logic
+      prevGeneralText: generalCell ? generalCell.innerText : '',
+      prevGeneralLocked: generalCell ? generalCell.classList.contains('zablokowane') : false,
       prevGenerałLicznik: generałLicznik.slice(),
       prevGenerałWynik: generałWynik.slice(),
       prevActiveGracz: aktywnyGracz
@@ -1409,10 +1700,8 @@ function zapisz(wartosc) {
   function finishSave() {
     komorka.innerText = wynik;
     komorka.classList.add("zablokowane");
-
     aktywnaKomorka = null;
     
-    // Zamknij panel
     document.getElementById("panel").classList.remove("aktywny");
     document.getElementById("opcje").innerHTML = "";
 
@@ -1421,13 +1710,11 @@ function zapisz(wartosc) {
     aktywnyGracz = (aktywnyGracz + 1) % liczbaGraczy;
     aktualizujTure();
     
-    // Sprawdź czy gra się skończyła
     setTimeout(() => checkGameEnd(), 100);
   }
 
-  // GENERAŁ - główny wpis
+  // GENERAŁ - set to 50 points if it's the first time, otherwise add 100 points for each subsequent General
   if (pole === "Generał" && wartosc === 50) {
-    // Zrób snapshot PRZED zmianą tablic generała, aby undo mógł przywrócić poprzedni stan
     const snap = createSnapshot();
     if (generałLicznik[gracz] === 0) {
       generałWynik[gracz] = 50;
@@ -1436,63 +1723,60 @@ function zapisz(wartosc) {
       generałWynik[gracz] += 100;
     }
     wynik = generałWynik[gracz];
-    // Zaktualizuj widok pola Generał
+    
     const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
     if (generalRow) {
       const generalCell = generalRow.cells[gracz + 1];
       if (generalCell) generalCell.innerText = generałWynik[gracz];
     }
-    // Dodaj snapshot i zakończ zapis (unikamy podwójnego snapshotu na końcu funkcji)
     undoStack.push(snap);
     finishSave();
     return;
   }
   
-  // Sprawdzenie czy to może być drugi/trzeci generał na innym polu
+  // BONUS LOGIC +100 (Further Generals on other fields)
   const polaZGeneralem = ["Jedynki", "Dwójki", "Trójki", "Czwórki", "Piątki", "Szóstki",
                           "Trzy jednakowe", "Cztery jednakowe", "Full", "Mały strit", "Duży strit", "Szansa"];
 
-  if (generałLicznik[gracz] > 0 && pole !== "Generał" && polaZGeneralem.includes(pole)) {
-    // Check for 5 of a kind (values 5, 10, 15, 20, 25, 30) in Szansa, Trzy jednakowe, Cztery jednakowe
+  // The +100 bonus is only available if the General field already has a value of 50 (not 0)
+  if (generałLicznik[gracz] > 0 && generałWynik[gracz] >= 50 && pole !== "Generał" && polaZGeneralem.includes(pole)) {
+    
     const polesWith5OfAKind = ["Szansa", "Trzy jednakowe", "Cztery jednakowe"];
-    // Fields from 1 do 6
-    const polaOdJedynekDoSzostek = ["Jedynki", "Dwójki", "Trójki", "Czwórki", "Piątki", "Szóstki"];
     let needsConfirm = false;
-    let confirmMessage = '';
+    let confirmMessage = 'Czy to jest generał (5 jednakowych)?\nDodać +100 do głównego generała?';
     let autoAddBonus = false;
 
-    // Pola 1-6 ze wartościami 5,10,15,20,25,30 -> zawsze generał, auto +100
-    // Specjalna logika dla Piątek – generał tylko przy 25
-    if (pole === "Piątki" && wartosc === 25) {
-      autoAddBonus = true;
-      // Pozostałe pola 1–6 (bez Piątek)
-    } else if (pole !== "Piątki" && polaOdJedynekDoSzostek.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
-      autoAddBonus = true;
-    } else if (polesWith5OfAKind.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
+    // Fix: Check fields 1-6. Value must be exactly 5 * field digit
+    if (mapaWartosciGorne[pole]) {
+      const wymaganaWartosc = 5 * mapaWartosciGorne[pole];
+      if (wartosc === wymaganaWartosc) {
+        autoAddBonus = true; // For upper section fields, we automatically add the bonus for the correct value
+      } else if (wartosc === 0) {
+        needsConfirm = true; // If we're crossing out a field with an active general, we ask for the bonus
+      }
+    } 
+    // Lower section fields (Szansa, 3 alike, 4 alike) - check multiples [5,10,15,20,25,30]
+    else if (polesWith5OfAKind.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
       needsConfirm = true;
-      confirmMessage = 'Czy to jest generał (5 jednakowych)?\nDodać +100 do głównego generała?';
-    } else if (polaOdJedynekDoSzostek.includes(pole) && wartosc === 0) {
-      // Pola 1-6 ze wartością 0 przy aktywnym generale -> pytaj
-      needsConfirm = true;
-      confirmMessage = 'Czy ta wartość 0 jest spowodowana generałem?\nDodać +100 do głównego generała?';
-    } else if (!polesWith5OfAKind.includes(pole) && !polaOdJedynekDoSzostek.includes(pole)) {
+    } 
+    // Other fields (Strike, Full) - if the value is the maximum for the field, we ask for a bonus
+    else if (!polesWith5OfAKind.includes(pole) && !mapaWartosciGorne[pole]) {
       const maxValue = Math.max(...pola[pole]);
-      if (wartosc === maxValue) {
+      if (wartosc === maxValue && wartosc > 0) {
         needsConfirm = true;
-        confirmMessage = 'Czy to jest generał?\nDodać +100 do głównego generała?';
       }
     }
 
     if (autoAddBonus) {
-      // Automatycznie dodaj +100 dla wartości 5,10,15,20,25,30 w polach 1-6
       const snap = createSnapshot();
-      snap.clearCellToEmpty = true;
       generałWynik[gracz] += 100;
-      // Aktualizuj pole Generał (jeśli istnieje)
       const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
       if (generalRow) {
         const generalCell = generalRow.cells[gracz + 1];
-        if (generalCell) generalCell.innerText = generałWynik[gracz];
+        if (generalCell) {
+          generalCell.innerText = generałWynik[gracz];
+          generalCell.classList.add("zablokowane");
+        }
       }
       undoStack.push(snap);
       finishSave();
@@ -1500,23 +1784,20 @@ function zapisz(wartosc) {
     }
 
     if (needsConfirm) {
-      // pokaż wewnętrzne potwierdzenie i zakończ zapis dopiero po decyzji
       showInlineConfirm(confirmMessage, () => {
-        // Tak: dodaj +100 do generała i zapisz
         const snap = createSnapshot();
-        // oznacz że to był "zwykły" generał na innym polu — przy cofaniu trzeba wyczyścić to pole
-        snap.clearCellToEmpty = true;
         generałWynik[gracz] += 100;
-        // Aktualizuj pole Generał (jeśli istnieje)
         const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
         if (generalRow) {
           const generalCell = generalRow.cells[gracz + 1];
-          if (generalCell) generalCell.innerText = generałWynik[gracz];
+          if (generalCell) {
+            generalCell.innerText = generałWynik[gracz];
+            generalCell.classList.add("zablokowane");
+          }
         }
         undoStack.push(snap);
         finishSave();
       }, () => {
-        // Nie: zapisz wartość BEZ +100 bonusu, przejdź do następnego gracza
         const snap = createSnapshot();
         undoStack.push(snap);
         finishSave();
@@ -1525,14 +1806,14 @@ function zapisz(wartosc) {
     }
   }
 
-  // Brak potrzeby potwierdzenia: zapisz i dodaj snapshot do stosu
+  // Standard save for any field without bonus implications
   const snap = createSnapshot();
   undoStack.push(snap);
   finishSave();
 }
 
 /* =======================
-   SUMY I PREMIA
+   SUM and BONUS CALCULATIONS
 ======================= */
 function przeliczSumy() {
   for (let g = 0; g < liczbaGraczy; g++) {
@@ -1551,7 +1832,7 @@ function przeliczSumy() {
     });
 
     const premia = sumaGorna >= 63 ? 35 : 0;
-    // Premia widoczna ponad sumą górną, ale jest wliczana do sumy górnej
+    // Bonus visible above the top total but included in the top total
     const sumaGornaZPremia = sumaGorna + premia;
     wpiszSume("Premia", g, premia);
     wpiszSume("Suma górna", g, sumaGornaZPremia);
@@ -1567,12 +1848,12 @@ function wpiszSume(nazwa, gracz, wartosc) {
 }
 
 /* =======================
-   KONIEC GRY
+   GAME END CHECK
 ======================= */
 function checkGameEnd() {
   const tabela = document.getElementById("tabela");
   
-  // Sprawdź czy wszystkie pola (poza sumami) są zablokowane dla wszystkich graczy
+  // Check if all fields (except sums) are blocked for all players
   for (let g = 0; g < liczbaGraczy; g++) {
     let allFilled = true;
     const fieldRows = Array.from(tabela.rows).filter(tr => tr.dataset.pole && !tr.dataset.sum);
@@ -1585,15 +1866,15 @@ function checkGameEnd() {
       }
     }
     
-    if (!allFilled) return; // Gra się nie skończyła
+    if (!allFilled) return; // Game is not over yet
   }
   
-  // Wszystkie pola wypełnione - pokaż wyniki
+  // All fields filled - show results
   showGameEndModal();
 }
 
 function showGameEndModal() {
-  // Zbierz ostateczne wyniki
+  // Collect final results
   const results = [];
   for (let g = 0; g < liczbaGraczy; g++) {
     const razem = document.querySelector(`tr[data-sum="RAZEM"]`).cells[g + 1].innerText;
@@ -1604,13 +1885,13 @@ function showGameEndModal() {
     });
   }
   
-  // Sortuj po wyniku malejąco
+  // Sort results by score descending
   results.sort((a, b) => b.wynik - a.wynik);
   
-  // ZAPISZ WYNIKI DO SUPABASE I LOKALNIE
+  // SAVE RESULTS TO SUPABASE AND LOCALLY
   (async () => {
     try {
-      // Dodaj grę do historii
+      // Add game to history
       const gameRecord = {
         date: new Date().toLocaleString('pl-PL'),
         results: results.map(r => ({
@@ -1625,7 +1906,7 @@ function showGameEndModal() {
       
       if (insertError) throw insertError;
 
-      // Aktualizuj highscores
+      // Update highscores
       for (const result of results) {
         const { data: existing, error: selectError } = await supabaseClient
           .from('highscores')
@@ -1636,7 +1917,7 @@ function showGameEndModal() {
         if (selectError) throw selectError;
 
         if (existing) {
-          // Gracz istnieje - aktualizuj jeśli wynik wyższy
+          // Player exists - update if score is higher
           const newWynik = Math.max(existing.wynik, result.wynik);
           const { error: updateError } = await supabaseClient
             .from('highscores')
@@ -1649,7 +1930,7 @@ function showGameEndModal() {
           
           if (updateError) throw updateError;
         } else {
-          // Nowy gracz
+          // New player
           const { error: insertScoreError } = await supabaseClient
             .from('highscores')
             .insert([{
@@ -1662,7 +1943,7 @@ function showGameEndModal() {
         }
       }
 
-      // Zwiększ licznik gier
+      // Increase game counter
       gameStats.totalGames++;
       const { error: statsError } = await supabaseClient
         .from('game_stats')
@@ -1671,7 +1952,7 @@ function showGameEndModal() {
       
       if (statsError) throw statsError;
 
-      // Załaduj zaktualizowane dane
+      // Load updated data
       await loadGameStats();
 
     } catch (error) {
@@ -1684,7 +1965,7 @@ function showGameEndModal() {
   })();
 }
 
-// Funkcja do prawidłowej infleksji słowa "punkt/punkty/punktów"
+// Function to properly inflect the word "punkt/punkty/punktów"
 function getPunktForm(n) {
   const abs = Math.abs(n);
   if (abs % 10 === 1 && abs % 100 !== 11) {
@@ -1697,7 +1978,7 @@ function getPunktForm(n) {
 }
 
 
-// Weryfikacja PIN dla istniejącego gracza
+// Function to verify PIN for an existing player
 async function verifyPlayerPIN(playerName, enteredPin) {
   try {
     if (!supabaseClient) return false;
@@ -1718,7 +1999,7 @@ async function verifyPlayerPIN(playerName, enteredPin) {
   }
 }
 
-// Zapisanie nowego gracza z PIN
+// Function to create a new player with a PIN
 async function createNewPlayerWithPIN(playerName, pin) {
   try {
     if (!supabaseClient) return false;
@@ -1741,7 +2022,7 @@ async function createNewPlayerWithPIN(playerName, pin) {
 }
 
 function showGameEndModalUI(results) {
-  // Stwórz modal
+  // Create modal
   const modal = document.createElement('div');
   modal.className = 'game-end-modal';
   
@@ -1752,7 +2033,7 @@ function showGameEndModalUI(results) {
   title.innerText = '🎉 Koniec gry!';
   modalContent.appendChild(title);
   
-  // Statystyki gry
+  // Game stats summary
   const statsDiv = document.createElement('div');
   statsDiv.className = 'game-stats-summary';
   const totalGamesText = document.createElement('p');
@@ -1760,7 +2041,7 @@ function showGameEndModalUI(results) {
   statsDiv.appendChild(totalGamesText);
   modalContent.appendChild(statsDiv);
   
-  // Obsługa remisu - znajdź wszystkich graczy z najwyższym wynikiem
+  // Tiebreaker Handling - Find all players with the highest score
   const maxScore = results[0].wynik;
   const winners = results.filter(r => r.wynik === maxScore);
   const runnerUp = results.find(r => r.wynik < maxScore);
@@ -1769,12 +2050,12 @@ function showGameEndModalUI(results) {
   resultText.className = 'game-end-result';
   
   if (winners.length > 1) {
-    // Remis
+    // Tie
     const winnerNames = winners.map(w => w.nazwa).join(', ');
     const punktForm = getPunktForm(maxScore);
     resultText.innerHTML = `🤝 <strong>REMIS!</strong><br><strong>${winnerNames}</strong><br>wszyscy mają <strong>${maxScore}</strong> ${punktForm}`;
   } else {
-    // Jedna osoba wygrała
+    // One person won
     const winner = winners[0];
     const advantage = winner.wynik - (runnerUp ? runnerUp.wynik : 0);
     const punktForm = getPunktForm(advantage);
@@ -1805,7 +2086,7 @@ function showGameEndModalUI(results) {
   };
   buttons.appendChild(newGameBtn);
   
-  // (Przycisk "Zagraj ponownie" usunięty - używamy teraz opcji w potwierdzeniu)
+  // (Button "Zagraj ponownie" removed - use now the "Rewanż" option in the confirm after clicking "Nowa gra")
   
   const statsBtn = document.createElement('button');
   statsBtn.innerText = 'Historia rozgrywek';
@@ -1819,7 +2100,7 @@ function showGameEndModalUI(results) {
   modal.appendChild(modalContent);
   document.body.appendChild(modal);
   
-  // Pokaż modal
+  // Show modal
   setTimeout(() => modal.classList.add('aktywny'), 0);
 }
 
@@ -1852,7 +2133,7 @@ function showInlineConfirmTwoOptions(message, opt1Label, opt2Label, onOpt1, onOp
   box.style.borderRadius = '8px';
   box.style.backgroundColor = 'white';
   box.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.2)';
-  // CSS centering - zawsze będzie na środku ekranu
+  // CSS centering - allways in the center of the viewport, even on scroll, and works well with variable height content
   box.style.left = '50%';
   box.style.top = '50%';
   box.style.transform = 'translate(-50%, -50%)';
@@ -1921,7 +2202,7 @@ function replayGame() {
 }
 
 
-// Wyświetl panel statystyk i highscores
+// Show stats panel and highscores
 function showStatsPanel() {
   const modal = document.createElement('div');
   modal.className = 'stats-modal';
@@ -1949,11 +2230,11 @@ function showStatsPanel() {
   const winsMap = {};
   gameStats.gameHistory.forEach(g => {
     if (g.results && g.results.length > 0) {
-      // Znajdź maksymalny wynik w tej grze
+      // Find the highest score in this game
       const maxScore = Math.max(...g.results.map(r => r.wynik));
-      // Pobierz wszystkich graczy z maksymalnym wynikiem (remis)
+      // Get all players with the highest score (tie)
       const winners = g.results.filter(r => r.wynik === maxScore);
-      // Dodaj +1 tylko jeśli dokładnie jeden zwycięzca (bez remisu)
+      // Add +1 only if exactly one winner (no tie)
       if (winners.length === 1 && winners[0].nazwa) {
         winsMap[winners[0].nazwa] = (winsMap[winners[0].nazwa] || 0) + 1;
       }
@@ -1982,7 +2263,7 @@ function showStatsPanel() {
   highscoresSection.appendChild(hsWrapper);
   statsBody.appendChild(highscoresSection);
   
-  // HISTORIA OSTATNICH PARTII
+  // HISTORY OF RECENT GAMES
   const historySection = document.createElement('div');
   historySection.className = 'stats-section';
   
@@ -2018,7 +2299,7 @@ function showStatsPanel() {
   // append scrollable body to modal content so footer stays visible
   modalContent.appendChild(statsBody);
   
-  // PRZYCISKI
+  // BUTTONS
   const buttons = document.createElement('div');
   buttons.className = 'stats-buttons';
   
@@ -2033,12 +2314,12 @@ function showStatsPanel() {
   modal.appendChild(modalContent);
   document.body.appendChild(modal);
   
-  // Pokaż modal - nie dodawaj event listenera na tło aby zapobiec zamknięciu
+  // Show modal - don't add event listener on backdrop to prevent closing
   setTimeout(() => modal.classList.add('aktywny'), 0);
 }
 
 /* =======================
-   POMOCNICZE
+   HELPER FUNCTIONS
 ======================= */
 function gorne(n) {
   return Array.from({ length: 6 }, (_, i) => i * n);
@@ -2143,3 +2424,13 @@ window.addEventListener('scroll', debouncedUpdate);
 
 // initial position
 debouncedUpdate();
+
+document.addEventListener('mousedown', (e) => {
+  // If the user clicked on something that is NOT the input container or its dropdown...
+  if (!e.target.closest('.nazwa-input-container')) {
+    // ...find all open dropdowns and close them immediately
+    document.querySelectorAll('.nazwa-input-dropdown.aktywny').forEach(dropdown => {
+      dropdown.classList.remove('aktywny');
+    });
+  }
+});
