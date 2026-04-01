@@ -1005,7 +1005,6 @@ function etapStartowania() {
   // Obsługa Entera na ekranie wyboru gracza startowego
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
-    e.preventDefault();
     const etapStart = document.getElementById("etap-start");
     // Check if we are currently on the start selection stage and the buttons are visible
     if (etapStart && etapStart.style.display !== "none") {
