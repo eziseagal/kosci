@@ -1002,13 +1002,22 @@ function etapStartowania() {
   }
 }
 
-  // Obsługa Entera na ekranie wyboru gracza startowego
+  // Enter support on the starting player selection screen
 document.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented) return;
   if (e.key === 'Enter') {
+    if (document.activeElement && document.activeElement.tagName === 'BUTTON') {
+      e.preventDefault();
+      document.activeElement.click();
+      return;
+    }
+
+    const startContainer = document.getElementById("start");
     const etapStart = document.getElementById("etap-start");
-    // Check if we are currently on the start selection stage and the buttons are visible
-    if (etapStart && etapStart.style.display !== "none") {
-      // If the user hasn't selected a specific player, the game will randomly select the starting player (logic in startGry)
+    
+    if (startContainer && startContainer.style.display !== "none" && 
+        etapStart && etapStart.style.display !== "none") {
+      e.preventDefault();
       startGry();
     }
   }

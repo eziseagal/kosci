@@ -917,6 +917,42 @@ tr[data-sum="RAZEM"] td:not(:first-child) {
   background-color: #f9f9f9;
 }
 
+/* FORCE SCROLL BAR VISIBILITY ON macOS/SAFARI */
+.options-grid::-webkit-scrollbar,
+.nazwa-input-dropdown::-webkit-scrollbar,
+.history-list::-webkit-scrollbar,
+.highscores-wrapper::-webkit-scrollbar,
+.stats-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.options-grid::-webkit-scrollbar-track,
+.nazwa-input-dropdown::-webkit-scrollbar-track,
+.history-list::-webkit-scrollbar-track,
+.highscores-wrapper::-webkit-scrollbar-track,
+.stats-body::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 5px;
+  border: 1px solid #e0e0e0;
+}
+
+.options-grid::-webkit-scrollbar-thumb,
+.nazwa-input-dropdown::-webkit-scrollbar-thumb,
+.history-list::-webkit-scrollbar-thumb,
+.highscores-wrapper::-webkit-scrollbar-thumb,
+.stats-body::-webkit-scrollbar-thumb {
+  background: #b0b0b0;
+  border-radius: 5px;
+}
+
+.options-grid::-webkit-scrollbar-thumb:hover,
+.nazwa-input-dropdown::-webkit-scrollbar-thumb:hover,
+.history-list::-webkit-scrollbar-thumb:hover,
+.highscores-wrapper::-webkit-scrollbar-thumb:hover,
+.stats-body::-webkit-scrollbar-thumb:hover {
+  background: #909090;
+}
+
 /* Force scrollbar visibility on macOS/Safari */
 .game-end-ranking::-webkit-scrollbar {
   width: 8px;
