@@ -1622,10 +1622,10 @@ input[type="number"] {
   body.left-floating .layout.aktywna, 
   .layout.aktywna {
     margin: 0 !important;
-    padding: 10px !important;
-    padding-top: 150px !important;
-    width: 100vw !important;
-    min-width: 100vw !important;
+    padding: 1px !important;
+    padding-top: 111px !important;
+    width: 10vw !important;
+    min-width: 100% !important;
     box-sizing: border-box;
   }
 
@@ -1634,59 +1634,99 @@ input[type="number"] {
     transform: translateX(-50%) !important;
     width: 100%;
     align-items: center;
-    top: 10px;
-    gap: 8px;
+    top: 0.5px;
+    gap: 0.5px;
+    zoom: 0.6;
   }
 
   h1, body.left-floating h1.floating-title {
-    font-size: 1.5em;
-    padding: 8px 16px;
+    font-size: 1.0em;
+    padding: 4px 8px;
     margin: 0;
     position: relative !important;
     top: 0 !important;
   }
 
-  body.no-scroll {
-  overflow: hidden !important;
-  touch-action: none;
-  -webkit-overflow-scrolling: auto;
-}
+    body.no-scroll {
+    overflow: hidden !important;
+    touch-action: none;
+    -webkit-overflow-scrolling: auto;
+  }
 
   th:first-child, td:first-child { 
-    width: 100px !important; 
+    width: 150px !important; 
     font-size: 0.9em; 
   }
   th, td { 
-    width: 85px !important; 
-    height: 40px !important; 
+    width: 100px !important; 
+    height: 38px !important; 
     font-size: 0.95em; 
   }
 
   .table-wrapper {
     width: 100%;
     max-width: 100%;
-    margin: 0 auto;
+    margin: 10 auto;
     -webkit-overflow-scrolling: touch;
     background: transparent;
     box-shadow: none;
-    padding-bottom: 10px;
+    padding-bottom: 20px;
   }
+
   table {
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    margin: 0 auto; 
+    margin: auto;
   }
 
   #panel {
     min-width: 0 !important;
-    width: 90%;
+    width: 92%;
     padding: 16px;
-    left: 50% !important;     
-    top: 50% !important;
-    transform: translate(-50%, -50%) !important; 
+    left: 50% !important;
+    top: 60% !important;
+    transform: translate(-50%, -50%) !important;
+    scale: 100%;
+  }
+
+  .options-grid {
+    max-height: 35vh;
+    zoom: 90%
   }
 
   #controls {
-    bottom: 20px;
-    right: 20px;
+    bottom: 5px;
+    right: 5px;
+    scale: 70%;
+
+  }
+
+  .nazwa-input input {
+    width: px;
+    padding: px;
+    font-size: 0.8em;
+    border: 2px solid #2c3e50;
+    border-radius: 4px;
+  }
+
+  html, body {
+    margin: 0px;
+    padding: 5px;
+  }
+  
+  #start {
+    zoom: 0.9;
+  }
+
+  .inline-confirm-msg {
+    zoom: 0.7;
+  }
+
+  .stats-modal {
+    zoom: 0.6;
+    min-height: 160vh
+  }
+  
+  .stats-content {
+    min-height: 130vh
   }
 }
