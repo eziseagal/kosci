@@ -852,7 +852,7 @@ async function showInlinePINDialog(playerName, isExisting) {
       input.maxLength = 1;
       input.inputMode = 'numeric';
       input.pattern = '[0-9]*';
-      input.style.cssText = 'width: 55px; height: 65px; line-height: 65px; padding: 0; font-size: 2em; font-family: monospace; text-align: center; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; outline: none; transition: border-color 0.2s, box-shadow 0.2s; -webkit-text-security: disc;';      input.style.fontFamily = 'monospace';
+      input.style.cssText = 'width: 50px; height: 60px; font-size: 28px; text-align: center; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; outline: none; transition: border-color 0.2s; -webkit-text-security: disc; background: white; color: black; margin: 0 2px;';
       input.onfocus = () => {
         input.style.borderColor = '#2196f3';
         input.style.boxShadow = '0 0 8px rgba(33, 150, 243, 0.3)';
