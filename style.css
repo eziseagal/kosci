@@ -1617,7 +1617,7 @@ input[type="number"] {
   margin-left: auto !important; 
 }
 
-  /*OPTYMALIZACJA MOBILNA */ 
+  /*MOBILE OPTIMIZATION */ 
 @media (max-width: 768px) {
   body.left-floating .layout.aktywna, 
   .layout.aktywna {
@@ -1632,7 +1632,7 @@ input[type="number"] {
   #left-floating {
     left: 50% !important;
     transform: translateX(-50%) !important;
-    width: 80%;
+    width: 100%;
     align-items: center;
     top: 10px;
     gap: 8px;
@@ -1645,6 +1645,12 @@ input[type="number"] {
     position: relative !important;
     top: 0 !important;
   }
+
+  body.no-scroll {
+  overflow: hidden !important;
+  touch-action: none;
+  -webkit-overflow-scrolling: auto;
+}
 
   th:first-child, td:first-child { 
     width: 100px !important; 
@@ -1667,7 +1673,7 @@ input[type="number"] {
   }
   table {
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    margin: 0 auto; /* Centruje tabelę, gdy jest mała */
+    margin: 0 auto; 
   }
 
   #panel {
