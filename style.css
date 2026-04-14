@@ -1623,32 +1623,19 @@ input[type="number"] {
   .layout.aktywna {
     margin: 0 !important;
     padding: 10px !important;
-    padding-top: 130px !important; 
+    padding-top: 150px !important;
     width: 100vw !important;
     min-width: 100vw !important;
     box-sizing: border-box;
-    display: block !important; 
   }
 
   #left-floating {
-    position: fixed !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
-    width: 100%;
+    width: 80%;
     align-items: center;
-    top: 0 !important;
-    gap: 6px;
-    padding-top: 10px;
-    padding-bottom: 10px;
-    background: linear-gradient(to bottom, rgba(255,255,255,0.95) 60%, rgba(255,255,255,0) 100%);
-    z-index: 2000;
-  }
-
-  body.no-scroll {
-  overflow: hidden !important;
-  height: 100vh !important;
-  position: fixed !important; 
-  width: 100vw !important;
+    top: 10px;
+    gap: 8px;
   }
 
   h1, body.left-floating h1.floating-title {
