@@ -847,6 +847,7 @@ tr[data-sum="RAZEM"] td:not(:first-child) {
   top: 0;
   z-index: 2210;
   pointer-events: auto;
+  overscroll-behavior: contain;
 }
 
 #panel h3 {
@@ -915,6 +916,8 @@ tr[data-sum="RAZEM"] td:not(:first-child) {
   border: 1px solid #ddd;
   border-radius: 4px;
   background-color: #f9f9f9;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; 
 }
 
 /* FORCE SCROLL BAR VISIBILITY ON macOS/SAFARI */
@@ -1298,20 +1301,26 @@ td.nieaktywny {
   font-weight: 600;
 }
 
-.stats-table th:first-child {
+.stats-table th:first-child,
+.stats-table td:first-child {
+  width: 50px;           
   min-width: 50px;
+  max-width: 50px;
+  padding: 12px 5px;     
+  text-align: center;
+  white-space: nowrap;   
+}
+
+.stats-table th:nth-child(2),
+.stats-table td:nth-child(2) {
+  width: 100%;
+  text-align: left;
 }
 
 .stats-table td {
   padding: 12px;
   border-bottom: 1px solid #e0e0e0;
   font-size: 1em;
-}
-
-.stats-table td:first-child {
-  padding-left: 12px;
-  min-width: 50px;
-  text-align: center;
 }
 
 .stats-table tr:last-child td {

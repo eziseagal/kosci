@@ -848,11 +848,14 @@ async function showInlinePINDialog(playerName, isExisting) {
     const inputs = [];
     for (let i = 0; i < 4; i++) {
       const input = document.createElement('input');
-      input.type = 'password';
+      input.type = 'tel';
       input.maxLength = 1;
       input.inputMode = 'numeric';
+      input.pattern = '[0-9]*';
       input.style.cssText = 'width: 55px; height: 65px; font-size: 2.2em; font-family: monospace; text-align: center; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; outline: none; transition: border-color 0.2s, box-shadow 0.2s;';
-      
+      input.style.webkitTextSecurity = 'disc'; 
+      input.style.fontFamily = 'monospace';
+
       input.onfocus = () => {
         input.style.borderColor = '#2196f3';
         input.style.boxShadow = '0 0 8px rgba(33, 150, 243, 0.3)';
@@ -1168,6 +1171,8 @@ function renderOpcje(pole) {
   input.type = "number";
   input.min = "0";
   input.max = "50";
+  input.inputMode = "numeric";
+  input.pattern = "[0-9]*"; 
   input.placeholder = "";
   input.spellcheck = false;
   input.autofocus = true;
