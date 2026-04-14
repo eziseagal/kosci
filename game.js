@@ -848,12 +848,11 @@ async function showInlinePINDialog(playerName, isExisting) {
     const inputs = [];
     for (let i = 0; i < 4; i++) {
       const input = document.createElement('input');
-      input.type = 'tel';
+      input.type = 'password';
       input.maxLength = 1;
       input.inputMode = 'numeric';
       input.pattern = '[0-9]*';
       input.style.cssText = 'width: 55px; height: 65px; font-size: 2.2em; font-family: monospace; text-align: center; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; outline: none; transition: border-color 0.2s, box-shadow 0.2s;';
-      input.style.webkitTextSecurity = 'disc'; 
       input.style.fontFamily = 'monospace';
 
       input.onfocus = () => {
@@ -1124,8 +1123,10 @@ function openPanel(pole, gracz, komorka) {
     const input = document.querySelector(".input-liczby input");
     if (input) {
       input.value = "";
-      input.focus();
-      input.select();
+      if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+        input.focus();
+        input.select();
+      }
     }
   }, 50);
 }

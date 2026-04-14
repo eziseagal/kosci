@@ -1616,3 +1616,36 @@ input[type="number"] {
   order: 2; 
   margin-left: auto !important; 
 }
+
+  /*OPTYMALIZACJA MOBILNA */ 
+@media (max-width: 768px) {
+  .layout.aktywna {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  #panel {
+    min-width: 0 !important;
+    width: 95%;
+    padding: 16px;
+    left: 50% !important;    
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important; 
+  }
+
+  .table-wrapper {
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 5px; 
+  }
+
+  h1 {
+    font-size: 1.8em;
+    padding: 8px 16px;
+  }
+
+  #controls {
+    bottom: 16px;
+    right: 16px;
+  }
+}
