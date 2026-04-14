@@ -848,13 +848,11 @@ async function showInlinePINDialog(playerName, isExisting) {
     const inputs = [];
     for (let i = 0; i < 4; i++) {
       const input = document.createElement('input');
-      input.type = 'password';
+      input.type = 'tel';
       input.maxLength = 1;
       input.inputMode = 'numeric';
       input.pattern = '[0-9]*';
-      input.style.cssText = 'width: 55px; height: 65px; font-size: 2.2em; font-family: monospace; text-align: center; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; outline: none; transition: border-color 0.2s, box-shadow 0.2s;';
-      input.style.fontFamily = 'monospace';
-
+      input.style.cssText = 'width: 55px; height: 65px; line-height: 65px; padding: 0; font-size: 2em; font-family: monospace; text-align: center; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; outline: none; transition: border-color 0.2s, box-shadow 0.2s; -webkit-text-security: disc;';      input.style.fontFamily = 'monospace';
       input.onfocus = () => {
         input.style.borderColor = '#2196f3';
         input.style.boxShadow = '0 0 8px rgba(33, 150, 243, 0.3)';
@@ -1119,6 +1117,7 @@ function openPanel(pole, gracz, komorka) {
     
     // Add active class after a short delay to allow CSS transitions (like fade-in) to work smoothly
     panel.classList.add("aktywny");
+    document.body.classList.add("no-scroll"); // Optional: prevent background scrolling when panel is open
     
     const input = document.querySelector(".input-liczby input");
     if (input) {
@@ -1196,6 +1195,7 @@ function renderOpcje(pole) {
     if (e.key === "Escape") {
       const panel = document.getElementById("panel");
       panel.classList.remove("aktywny");
+      document.body.classList.remove("no-scroll");
       document.getElementById("opcje").innerHTML = "";
       aktywnaKomorka = null;
     }
@@ -1247,6 +1247,7 @@ document.addEventListener('mousedown', (e) => {
     // If I click outside the panel and the active cell, close the panel
     if (!panel.contains(e.target) && !komorka.contains(e.target)) {
       panel.classList.remove('aktywny');
+      document.body.classList.remove("no-scroll")
       document.getElementById('opcje').innerHTML = '';
       aktywnaKomorka = null;
     }
@@ -1718,6 +1719,7 @@ function zapisz(wartosc) {
     aktywnaKomorka = null;
     
     document.getElementById("panel").classList.remove("aktywny");
+    document.body.classList.remove("no-scroll");
     document.getElementById("opcje").innerHTML = "";
 
     przeliczSumy();
