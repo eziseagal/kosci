@@ -846,32 +846,42 @@ async function showInlinePINDialog(playerName, isExisting) {
     inputsContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center; margin-bottom: 25px;';
     
     const inputs = [];
+    let pinCode = ['', '', '', '']; 
+
     for (let i = 0; i < 4; i++) {
       const input = document.createElement('input');
-      input.type = 'tel';
+      input.type = 'tel'; 
       input.maxLength = 1;
-      input.inputMode = 'numeric';
-      input.pattern = '[0-9]*';
-      input.style.cssText = 'width: 50px; height: 60px; font-size: 28px; text-align: center; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; outline: none; transition: border-color 0.2s; -webkit-text-security: disc; background: white; color: black; margin: 0 2px;';
+      
+      input.style.cssText = 'width: 50px; height: 60px; font-size: 32px; font-family: monospace; text-align: center; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; outline: none; transition: border-color 0.2s, box-shadow 0.2s; background: white; color: black;';
+      
       input.onfocus = () => {
         input.style.borderColor = '#2196f3';
         input.style.boxShadow = '0 0 8px rgba(33, 150, 243, 0.3)';
+        input.value = ''; 
+        pinCode[i] = '';
       };
+      
       input.onblur = () => {
         input.style.borderColor = '#ddd';
         input.style.boxShadow = 'none';
       };
       
       input.oninput = (e) => {
-        // Wymuś tylko cyfry
-        input.value = input.value.replace(/[^0-9]/g, '');
+        const char = input.value.replace(/[^0-9]/g, '');
         
-        if (input.value.length === 1) {
+        if (char.length === 1) {
+          pinCode[i] = char;          
+          input.value = '•';          
+          
           if (i < 3) {
             inputs[i + 1].focus();
           } else {
             submitPin();
           }
+        } else {
+          input.value = '';
+          pinCode[i] = '';
         }
       };
       
@@ -879,6 +889,7 @@ async function showInlinePINDialog(playerName, isExisting) {
         if (e.key === 'Backspace' && input.value === '' && i > 0) {
           inputs[i - 1].focus();
           inputs[i - 1].value = '';
+          pinCode[i - 1] = '';
         }
         if (e.key === 'Escape') {
           overlay.remove();
@@ -897,7 +908,7 @@ async function showInlinePINDialog(playerName, isExisting) {
     setTimeout(() => inputs[0].focus(), 50);
     
     function submitPin() {
-      const pin = inputs.map(i => i.value).join('');
+      const pin = pinCode.join(''); 
       if (pin.length === 4) {
         overlay.style.opacity = '0';
         setTimeout(() => {
