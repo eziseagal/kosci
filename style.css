@@ -1624,11 +1624,10 @@ input[type="number"] {
     margin: 0 !important;
     padding: 1px !important;
     padding-top: 111px !important;
-    width: 10vw !important;
+    width: 100vw !important; 
     min-width: 100% !important;
     box-sizing: border-box;
   }
-
   #left-floating {
     left: 50% !important;
     transform: translateX(-50%) !important;
@@ -1638,7 +1637,6 @@ input[type="number"] {
     gap: 0.5px;
     zoom: 0.6;
   }
-
   h1, body.left-floating h1.floating-title {
     font-size: 1.0em;
     padding: 4px 8px;
@@ -1646,38 +1644,42 @@ input[type="number"] {
     position: relative !important;
     top: 0 !important;
   }
-
-    body.no-scroll {
-    overflow: hidden !important;
-    touch-action: none;
-    -webkit-overflow-scrolling: auto;
-  }
-
-  th:first-child, td:first-child { 
+   #tabela th:first-child, 
+  #tabela td:first-child { 
     width: 150px !important; 
     font-size: 0.9em; 
   }
-  th, td { 
+  #tabela th, 
+  #tabela td { 
     width: 100px !important; 
     height: 38px !important; 
     font-size: 0.95em; 
   }
-
+  .stats-table th:first-child,
+  .stats-table td:first-child {
+    width: 40px !important;  
+    min-width: 40px !important;
+    max-width: 40px !important;
+    padding: 8px 4px !important;
+  }
+  .stats-table th,
+  .stats-table td {
+    padding: 8px !important; 
+    font-size: 0.85em;       
+  }
   .table-wrapper {
     width: 100%;
     max-width: 100%;
-    margin: 10 auto;
-    -webkit-overflow-scrolling: touch;
+    margin: 10px auto;
+    -webkit-overflow-scrolling: touch; 
     background: transparent;
     box-shadow: none;
     padding-bottom: 20px;
   }
-
   table {
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     margin: auto;
   }
-
   #panel {
     min-width: 0 !important;
     width: 92%;
@@ -1687,46 +1689,38 @@ input[type="number"] {
     transform: translate(-50%, -50%) !important;
     scale: 100%;
   }
-
   .options-grid {
     max-height: 35vh;
-    zoom: 90%
+    zoom: 90%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; 
+    overscroll-behavior: contain;
   }
-
   #controls {
     bottom: 5px;
     right: 5px;
     scale: 70%;
-
   }
-
   .nazwa-input input {
-    width: px;
-    padding: px;
     font-size: 0.8em;
     border: 2px solid #2c3e50;
     border-radius: 4px;
   }
-
   html, body {
     margin: 0px;
     padding: 5px;
   }
-  
   #start {
     zoom: 0.9;
   }
-
   .inline-confirm-msg {
     zoom: 0.7;
   }
-
   .stats-modal {
     zoom: 0.6;
-    min-height: 160vh
+    min-height: 160vh;
   }
-  
   .stats-content {
-    min-height: 130vh
+    min-height: 130vh; 
   }
 }
