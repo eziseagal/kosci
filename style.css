@@ -67,6 +67,49 @@ h1 {
   border-radius: 4px;
 }
 
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin: 20px 0;
+}
+
+.menu-btn {
+  padding: 14px;
+  font-size: 1.1em;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.menu-btn.play {
+  font-size: 1.25em;
+  background: linear-gradient(135deg, #4caf50 0%, #388e3c 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.menu-btn.rules {
+  background: linear-gradient(135deg, #ffb74d 0%, #ff9800 100%);
+  color: #5d2b00;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.25);
+}
+
+.menu-btn.stats {
+  background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+}
+
+.menu-btn:hover {
+  transform: translateY(-2px);
+}
+.menu-btn.play:hover { box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4); }
+.menu-btn.rules:hover { box-shadow: 0 6px 16px rgba(255, 152, 0, 0.35); }
+.menu-btn.stats:hover { box-shadow: 0 6px 16px rgba(33, 150, 243, 0.4); }
+
 /* --- DRAG & DROP and ADDING/REMOVING PLAYERS --- */
 #start {
   max-width: 660px; 
@@ -1685,9 +1728,8 @@ input[type="number"] {
     width: 92%;
     padding: 16px;
     left: 50% !important;
-    top: 60% !important;
+    top: 59% !important;
     transform: translate(-50%, -50%) !important;
-    scale: 100%;
   }
   .options-grid {
     max-height: 35vh;
@@ -1722,5 +1764,11 @@ input[type="number"] {
   }
   .stats-content {
     min-height: 130vh; 
+  }
+  .inline-confirm {
+    scale: 96%;
+    left: -0.5% !important;
+    top: 40% !important;
+    font-size: 130%;
   }
 }

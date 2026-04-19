@@ -12,8 +12,17 @@
 
 <h1 style="font-size: 2.0em; margin: 10px 0;">🎲 Gra w Kości</h1>
 
-<div id="start" style="font-size: 1.2em;">
-  <div id="etap-liczba">
+<div id="start">
+  <div id="etap-menu">
+    <h2>Menu Główne</h2>
+    <div class="menu-buttons">
+      <button id="btn-menu-play" class="menu-btn play">🎮 Zagraj</button>
+      <button id="btn-menu-rules" class="menu-btn rules">📜 Zasady gry</button>
+      <button id="btn-menu-stats" class="menu-btn stats">📊 Historia rozgrywek</button>
+    </div>
+  </div>
+
+  <div id="etap-liczba" style="display:none;">
     <h2>Liczba graczy</h2>
     <div class="gracz-selector" id="liczba-graczy-buttons"></div>
   </div>
@@ -40,6 +49,7 @@
 <div id="controls" class="fab-container">
   <div class="fab-menu" id="fabMenu">
     <button id="btnStats" class="fab-action">📊 Historia rozgrywek</button>
+    <button id="btnRules" class="fab-action">📜 Zasady gry</button>
     <button id="btnNewGame" class="fab-action">🔄 Nowa gra</button>
     <button id="btnUndo" class="fab-action">↩️ Cofnij</button>
   </div>

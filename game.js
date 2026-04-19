@@ -175,7 +175,19 @@ const gornePola = [
   await loadGameStats();
   init();
   initPlayerCountButtons();
+  bindStartScreenButtons();
 })();
+
+function bindStartScreenButtons() {
+  // Main menu
+  document.getElementById('btn-menu-play').onclick = () => pokazEtapLiczba();
+  document.getElementById('btn-menu-rules').onclick = () => showRulesModal();
+  document.getElementById('btn-menu-stats').onclick = () => showStatsPanel();
+  
+  // "Next" button (nicknames stage) and "Start game" button
+  document.getElementById('btn-dalej-nazwy').onclick = () => validateAndProceedToStart();
+  document.getElementById('btn-rozpocznij-gre').onclick = () => startGry();
+}
 
 /* =======================
    INITIALIZATION
@@ -352,6 +364,13 @@ function updatePlayerLabels() {
     const input = row.querySelector('input[type="text"]');
     return input ? input.value.trim() : "";
   });
+}
+
+function pokazEtapLiczba() {
+  document.getElementById("etap-menu").style.display = "none";
+  document.getElementById("etap-liczba").style.display = "block";
+
+  initPlayerCountButtons();
 }
 
 function etapNazwy() {
@@ -1329,10 +1348,9 @@ function requestUndo(targetEl) {
 
 // Reset the game - after confirmation
 function resetGame() {
-  // show the start screen and reset the states
-  // show the start screen and set it to the first stage of player count selection
   document.getElementById('start').style.display = 'block';
-  document.getElementById('etap-liczba').style.display = 'block';
+  document.getElementById('etap-menu').style.display = 'block';
+  document.getElementById('etap-liczba').style.display = 'none';
   document.getElementById('etap-nazwy').style.display = 'none';
   document.getElementById('etap-start').style.display = 'none';
   
@@ -1470,6 +1488,7 @@ function bindControlButtons() {
   const btnUndo = document.getElementById('btnUndo');
   const btnNew = document.getElementById('btnNewGame');
   const btnStats = document.getElementById('btnStats');
+  const btnRules = document.getElementById('btnRules');
   if (btnUndo) {
     btnUndo.onclick = (e) => { e.preventDefault(); requestUndo(btnUndo); };
   }
@@ -1478,6 +1497,9 @@ function bindControlButtons() {
   }
   if (btnStats) {
     btnStats.onclick = (e) => { e.preventDefault(); showStatsPanel(); };
+  }
+  if (btnRules) { 
+    btnRules.onclick = (e) => { e.preventDefault(); showRulesModal(); };
   }
 }
 
@@ -1514,14 +1536,12 @@ function showErrorNotification(message) {
 }
 
 // Shows an internal confirmation in the panel (doesn't use alert/confirm)
-function showInlineConfirm(message, onYes, onNo) {
-  // remove existing global confirmations
+function showInlineConfirm(message, onYes, onNo, onCancel) {
   const existing = document.body.querySelector('.inline-confirm.global-fixed');
   if (existing) existing.remove();
   const existingOverlay = document.body.querySelector('.confirm-overlay');
   if (existingOverlay) existingOverlay.remove();
 
-  // Add overlay - background that will block interactions with the game
   const overlay = document.createElement('div');
   overlay.className = 'confirm-overlay';
   overlay.style.position = 'fixed';
@@ -1531,12 +1551,12 @@ function showInlineConfirm(message, onYes, onNo) {
   overlay.style.height = '100%';
   overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
   overlay.style.zIndex = 2250;
+
   overlay.onclick = () => {
-    // Clicking on the overlay = answer "No"
-    if (box) box.remove();
-    overlay.remove();
-    if (onNo) onNo();
+    cleanup();
+    if (onCancel) onCancel();
   };
+
   document.body.appendChild(overlay);
 
   const box = document.createElement('div');
@@ -1552,16 +1572,20 @@ function showInlineConfirm(message, onYes, onNo) {
 
   const msg = document.createElement('div');
   msg.className = 'inline-confirm-msg';
-  msg.innerText = message;
+  msg.innerHTML = message.replace(/\n/g, '<br>');
   box.appendChild(msg);
 
   const actions = document.createElement('div');
   actions.className = 'inline-confirm-actions';
   actions.style.marginTop = '16px';
 
+  actions.style.display = 'flex';
+  actions.style.justifyContent = 'flex-end';
+  actions.style.gap = '8px';
+
   const yes = document.createElement('button');
   yes.className = 'inline-yes';
-  yes.innerText = 'Tak';
+  yes.innerText = 'Tak, dodaj';
   yes.onclick = () => {
     box.remove();
     overlay.remove();
@@ -1570,44 +1594,54 @@ function showInlineConfirm(message, onYes, onNo) {
 
   const no = document.createElement('button');
   no.className = 'inline-no';
-  no.innerText = 'Nie';
+  no.innerText = 'Nie dodawaj';
   no.onclick = () => {
-    box.remove();
-    overlay.remove();
+    cleanup();
     if (onNo) onNo();
   };
 
+  const cancel = document.createElement('button');
+  cancel.className = 'rematch-btn';
+  cancel.innerText = 'Anuluj ruch';
+  cancel.onclick = () => {
+    cleanup();
+    if (onCancel) onCancel();
+  };
+
+  function cleanup() {
+    box.remove();
+    overlay.remove();
+  }
+
   actions.appendChild(yes);
   actions.appendChild(no);
+  const spacer = document.createElement('div');
+  spacer.style.flex = '1';
+
+  actions.appendChild(spacer); 
+
+  actions.appendChild(cancel);
   box.appendChild(actions);
 
   document.body.appendChild(box);
 
-  // Position in the center of the screen
   const brect = box.getBoundingClientRect();
-  const left = (window.innerWidth - brect.width) / 2;
-  const top = (window.innerHeight - brect.height) / 2;
+  box.style.left = ((window.innerWidth - brect.width) / 2) + 'px';
+  box.style.top = ((window.innerHeight - brect.height) / 2) + 'px';
 
-  box.style.left = Math.round(left) + 'px';
-  box.style.top = Math.round(top) + 'px';
+  setTimeout(() => yes.focus(), 0);
 
-  // Auto-focus "Tak" button and allow Enter to confirm it
-  setTimeout(() => {
-    yes.focus();
-  }, 0);
-
-  const onBoxKeydown = (e) => {
+  box.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       yes.click();
     }
     if (e.key === 'Escape') {
       e.preventDefault();
-      no.click();
+      cancel.click(); // important: ESC = cancel, not "No"
     }
-  };
-  box.addEventListener('keydown', onBoxKeydown);
-}
+  });
+  }
 
 // Shows a confirmation near a given element (e.g., a button)
 function showInlineConfirmNear(targetEl, message, onYes, onNo) {
@@ -1766,33 +1800,58 @@ function zapisz(wartosc) {
   const polaZGeneralem = ["Jedynki", "Dwójki", "Trójki", "Czwórki", "Piątki", "Szóstki",
                           "Trzy jednakowe", "Cztery jednakowe", "Full", "Mały strit", "Duży strit", "Szansa"];
 
-  // The +100 bonus is only available if the General field already has a value of 50 (not 0)
   if (generałLicznik[gracz] > 0 && generałWynik[gracz] >= 50 && pole !== "Generał" && polaZGeneralem.includes(pole)) {
     
     const polesWith5OfAKind = ["Szansa", "Trzy jednakowe", "Cztery jednakowe"];
     let needsConfirm = false;
-    let confirmMessage = 'Czy to jest generał (5 jednakowych)?\nDodać +100 do głównego generała?';
     let autoAddBonus = false;
+    
+    // Building a dynamic message depending on the free fields at the top
+    let confirmMessage = 'Czy to jest Generał (5 jednakowych kości)?\nDodać +100 pkt premii?';
 
-    // Fix: Check fields 1-6. Value must be exactly 5 * field digit
     if (mapaWartosciGorne[pole]) {
       const wymaganaWartosc = 5 * mapaWartosciGorne[pole];
       if (wartosc === wymaganaWartosc) {
-        autoAddBonus = true; // For upper section fields, we automatically add the bonus for the correct value
+        autoAddBonus = true; 
       } else if (wartosc === 0) {
-        needsConfirm = true; // If we're crossing out a field with an active general, we ask for the bonus
+        needsConfirm = true; 
       }
-    } 
-    // Lower section fields (Szansa, 3 alike, 4 alike) - check multiples [5,10,15,20,25,30]
-    else if (polesWith5OfAKind.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
+    } else if (polesWith5OfAKind.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
       needsConfirm = true;
-    } 
-    // Other fields (Strike, Full) - if the value is the maximum for the field, we ask for a bonus
-    else if (!polesWith5OfAKind.includes(pole) && !mapaWartosciGorne[pole]) {
+    } else if (!polesWith5OfAKind.includes(pole) && !mapaWartosciGorne[pole]) {
       const maxValue = Math.max(...pola[pole]);
       if (wartosc === maxValue && wartosc > 0) {
         needsConfirm = true;
       }
+    }
+
+    // If the player confirms the Joker in the BOTTOM section, we verify the top and add a warning
+    if (needsConfirm && !mapaWartosciGorne[pole]) {
+      let wolneWartosci = [];
+      
+      for (let p in mapaWartosciGorne) {
+        const wierszGory = document.querySelector(`tr[data-pole="${p}"]`);
+        if (wierszGory) {
+          const komorkaGory = wierszGory.cells[gracz + 1];
+          // If the cell is not locked, it means the field is free
+          if (komorkaGory && !komorkaGory.classList.contains('zablokowane')) {
+            wolneWartosci.push(mapaWartosciGorne[p]);
+          }
+        }
+      }
+      
+      // If there are empty fields at the top, add text to the question
+      if (wolneWartosci.length > 0) {
+        const tekstWartosci = wolneWartosci.join(" ] [ ");
+        // We add a stylish HTML block with a warning
+        confirmMessage += `<br><br><div style="background: #fff3cd; color: #856404; padding: 12px; border-left: 4px solid #ffc107; border-radius: 4px; font-size: 0.85em; text-align: left; line-height: 1;">
+          <div style="font-size: 1.2em; font-weight: bold; margin: 0 0 10px 0; padding: 0;">⚠️ Przypomnienie - Zasada Jokera:</div>
+          <div style="margin: 0;">Z Jokera możesz skorzystać tylko wtedy, gdy pole
+          w górnej części tabeli dla wyrzuconych oczek jest zajęte. Masz wciąż wolne kategorie:</div>
+          <div style="font-size: 1.5em; color: #d32f2f; font-weight: bold; margin: 8px 0; text-align: center;">[ ${tekstWartosci} ]</div>
+          <div style="margin: 0;">Jeśli Twój Generał składa się z wymienionych kategorii, <strong>MUSISZ</strong> wpisać go w górnej części tabeli!</div>
+          </div>`;
+        }
     }
 
     if (autoAddBonus) {
@@ -2462,3 +2521,66 @@ document.addEventListener('mousedown', (e) => {
     });
   }
 });
+
+// Displays a window with the game rules
+function showRulesModal() {
+  const modal = document.createElement('div');
+  modal.className = 'stats-modal'; 
+  
+  const modalContent = document.createElement('div');
+  modalContent.className = 'stats-content';
+  
+  const title = document.createElement('h2');
+  title.innerText = '📜 Zasady gry';
+  modalContent.appendChild(title);
+  
+  const body = document.createElement('div');
+  body.className = 'stats-body rules-body';
+  // Wyjustowanie i poprawa czytelności
+  body.style.textAlign = 'justify';
+  body.style.lineHeight = '1.6';
+  body.style.padding = '0 10px';
+  body.style.hyphens = 'auto'; // Pomaga z przełamywaniem długich słów przy justowaniu
+  
+  body.innerHTML = `
+    <h3 style="margin-top:0; color: #1976d2; text-align: left;">Przebieg rundy</h3>
+    <p>Gra składa się z 13 kolejek. W swojej turze gracz ma do dyspozycji <strong>maksymalnie 3 rzuty</strong> pięcioma kostkami. Po pierwszym i drugim rzucie można zatrzymać wybrane kości, przerzucając resztę. Po zakończeniu rzutów wynik <strong>musi</strong> zostać wpisany do jednej z wolnych kategorii. Jeśli układ nie pasuje do żadnej z nich, gracz musi "wykreślić" wybrane pole, wpisując 0 pkt.</p>
+
+    <h3 style="color: #1976d2; text-align: left;">Punktacja układów</h3>
+    <ul style="padding-left: 20px; margin-bottom: 20px; text-align: left;">
+      <li><strong>Górna sekcja (1-6):</strong> Suma oczek z kostek o wybranej wartości (np. trzy czwórki = 12 pkt).<br>
+      <em><strong>Premia (+35 pkt)</strong>: Przyznawana automatycznie, jeśli suma z górnej sekcji wyniesie min. 63 pkt.</em></li>
+      <li><strong>3 / 4 jednakowe:</strong> Suma oczek ze wszystkich 5 kości.</li>
+      <li><strong>Full:</strong> 25 pkt (3 jednakowe kości + 2 inne jednakowe).</li>
+      <li><strong>Mały strit:</strong> 30 pkt (4 kolejne kości, np. 1-2-3-4).</li>
+      <li><strong>Duży strit:</strong> 40 pkt (5 kolejnych kości).</li>
+      <li><strong>Szansa:</strong> Suma wszystkich oczek (dowolny układ).</li>
+      <li><strong>Generał:</strong> 50 pkt (5 jednakowych kości).</li>
+    </ul>
+
+    <h3 style="color: #1976d2; text-align: left;">Kolejny Generał (Premia i Joker)</h3>
+    <p>Za każdego kolejnego wyrzuconego Generała gracz otrzymuje <strong>100 punktów premii</strong> (pod warunkiem, że pole "Generał" jest już wypełnione wynikiem 50 pkt). Taki układ działa wtedy jak "Joker" i można go zapisać w dolnej sekcji za pełną wartość (np. jako Full za 25 pkt lub Strit za 40 pkt).</p>
+    
+    <div style="background: #fff3cd; color: #856404; padding: 15px; border-left: 5px solid #ffc107; margin-top: 20px; border-radius: 6px; font-size: 0.9em; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+      <strong style="font-size: 1.1em; display: block; text-align: left; margin-bottom: 8px;">⚠️ ZASADA JOKERA W APLIKACJI</strong>
+      Oficjalne zasady mówią, że aby użyć Generała jako "Jokera" w dolnej sekcji, kategoria w górnej części tabeli odpowiadająca wyrzuconym oczkom (np. pole "Piątki") <strong>musi być już uprzednio zajęte</strong>.<br><br>
+      <em>Ponieważ Kości to aplikacja pełniąca funkcję cyfrowego notesu, nie widzi ona rzutów na Twoim stole i <strong>nie wymusza tej blokady</strong>. To gracze przy stole sami decydują i pilnują honorowo tego, czy rzut spełnia oficjalne wymogi użycia Jokera.</em>
+    </div>
+  `;
+  
+  modalContent.appendChild(body);
+  
+  const buttons = document.createElement('div');
+  buttons.className = 'stats-buttons';
+  
+  const backBtn = document.createElement('button');
+  backBtn.innerText = 'Zrozumiałem';
+  backBtn.onclick = () => { modal.remove(); };
+  buttons.appendChild(backBtn);
+  
+  modalContent.appendChild(buttons);
+  modal.appendChild(modalContent);
+  document.body.appendChild(modal);
+  
+  setTimeout(() => modal.classList.add('aktywny'), 0);
+}
