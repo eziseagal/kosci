@@ -179,14 +179,19 @@ const gornePola = [
 })();
 
 function bindStartScreenButtons() {
-  // Main menu
-  document.getElementById('btn-menu-play').onclick = () => pokazEtapLiczba();
-  document.getElementById('btn-menu-rules').onclick = () => showRulesModal();
-  document.getElementById('btn-menu-stats').onclick = () => showStatsPanel();
+  // Secure button pinning (avoid null error)
+  const btnMenuPlay = document.getElementById('btn-menu-play');
+  const btnMenuRules = document.getElementById('btn-menu-rules');
+  const btnMenuStats = document.getElementById('btn-menu-stats');
+  const btnDalejNazwy = document.getElementById('btn-dalej-nazwy');
+  const btnRozpocznijGre = document.getElementById('btn-rozpocznij-gre');
+
+  if (btnMenuPlay) btnMenuPlay.onclick = () => pokazEtapLiczba();
+  if (btnMenuRules) btnMenuRules.onclick = () => showRulesModal();
+  if (btnMenuStats) btnMenuStats.onclick = () => showStatsPanel();
   
-  // "Next" button (nicknames stage) and "Start game" button
-  document.getElementById('btn-dalej-nazwy').onclick = () => validateAndProceedToStart();
-  document.getElementById('btn-rozpocznij-gre').onclick = () => startGry();
+  if (btnDalejNazwy) btnDalejNazwy.onclick = () => validateAndProceedToStart();
+  if (btnRozpocznijGre) btnRozpocznijGre.onclick = () => startGry();
 }
 
 /* =======================
@@ -428,6 +433,15 @@ function etapNazwy() {
     const firstInput = inputsDiv.querySelector('input');
     if (firstInput) firstInput.focus();
   }, 0);
+}
+
+function handleClickOutside(e) {
+  // Jeśli kliknięcie nie było w kontener wejścia nazwy, zamknij wszystkie dropdowny
+  if (!e.target.closest('.nazwa-input-container')) {
+    document.querySelectorAll('.nazwa-input-dropdown.aktywny').forEach(d => {
+      d.classList.remove('aktywny');
+    });
+  }
 }
 
 // Creates a single player row with drag and drop functionality and a minus button
@@ -1342,8 +1356,18 @@ function requestUndo(targetEl) {
     else showInlineConfirm('Brak akcji do cofnięcia.', () => {}, () => {});
     return;
   }
-  if (targetEl) showInlineConfirmNear(targetEl, 'Cofnąć ostatnią akcję?', () => undoLast(), () => {});
-  else showInlineConfirm('Cofnąć ostatnią akcję?', () => undoLast(), () => {});
+  
+  if (targetEl) {
+    showInlineConfirmNear(targetEl, 'Cofnąć ostatnią akcję?', () => undoLast(), () => {});
+  } else {
+    showInlineConfirm('Cofnąć ostatnią akcję?', () => undoLast(), () => {});
+  }
+
+  // Adding a helper class for CSS on mobile devices
+  const confirmBox = document.querySelector('.inline-confirm.global');
+  if (confirmBox && window.innerWidth <= 768) {
+    confirmBox.classList.add('confirm-undo-mobile');
+  }
 }
 
 // Reset the game - after confirmation
@@ -1733,23 +1757,17 @@ function zapisz(wartosc) {
   let { pole, gracz, komorka } = aktywnaKomorka;
   let wynik = wartosc;
 
-  // Map for upper section fields to their base values (e.g., "Trójki" -> 3) for easier bonus calculations
   const mapaWartosciGorne = { 
     "Jedynki": 1, "Dwójki": 2, "Trójki": 3, "Czwórki": 4, "Piątki": 5, "Szóstki": 6 
   };
 
   function createSnapshot() {
-    // We retrieve the current state of the General cell for this player so that we can restore it
     const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
     const generalCell = generalRow ? generalRow.cells[gracz + 1] : null;
-
     return {
-      pole,
-      gracz,
-      cell: komorka,
+      pole, gracz, cell: komorka,
       oldText: komorka.innerText,
       oldLocked: komorka.classList.contains('zablokowane'),
-      // Same for the General cell, we need to save its state because it can be modified by the bonus logic
       prevGeneralText: generalCell ? generalCell.innerText : '',
       prevGeneralLocked: generalCell ? generalCell.classList.contains('zablokowane') : false,
       prevGenerałLicznik: generałLicznik.slice(),
@@ -1762,20 +1780,16 @@ function zapisz(wartosc) {
     komorka.innerText = wynik;
     komorka.classList.add("zablokowane");
     aktywnaKomorka = null;
-    
     document.getElementById("panel").classList.remove("aktywny");
     document.body.classList.remove("no-scroll");
     document.getElementById("opcje").innerHTML = "";
-
     przeliczSumy();
-
     aktywnyGracz = (aktywnyGracz + 1) % liczbaGraczy;
     aktualizujTure();
-    
     setTimeout(() => checkGameEnd(), 100);
   }
 
-  // GENERAŁ - set to 50 points if it's the first time, otherwise add 100 points for each subsequent General
+  // 1. SERVICE OF THE FIRST GENERAL (ENTER IN THE GENERAL FIELD)
   if (pole === "Generał" && wartosc === 50) {
     const snap = createSnapshot();
     if (generałLicznik[gracz] === 0) {
@@ -1785,93 +1799,27 @@ function zapisz(wartosc) {
       generałWynik[gracz] += 100;
     }
     wynik = generałWynik[gracz];
-    
-    const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
-    if (generalRow) {
-      const generalCell = generalRow.cells[gracz + 1];
-      if (generalCell) generalCell.innerText = generałWynik[gracz];
-    }
     undoStack.push(snap);
     finishSave();
     return;
   }
-  
-  // BONUS LOGIC +100 (Further Generals on other fields)
-  const polaZGeneralem = ["Jedynki", "Dwójki", "Trójki", "Czwórki", "Piątki", "Szóstki",
-                          "Trzy jednakowe", "Cztery jednakowe", "Full", "Mały strit", "Duży strit", "Szansa"];
 
-  if (generałLicznik[gracz] > 0 && generałWynik[gracz] >= 50 && pole !== "Generał" && polaZGeneralem.includes(pole)) {
-    
-    const polesWith5OfAKind = ["Szansa", "Trzy jednakowe", "Cztery jednakowe"];
-    let needsConfirm = false;
-    let autoAddBonus = false;
-    
-    // Building a dynamic message depending on the free fields at the top
-    let confirmMessage = 'Czy to jest Generał (5 jednakowych kości)?\nDodać +100 pkt premii?';
+  // 2. BONUS LOGIC +100 (For a player who already has a General for 50 points)
+  if (generałLicznik[gracz] > 0 && generałWynik[gracz] >= 50 && pole !== "Generał") {
+    const polesWithFixedValue = ["Full", "Mały strit", "Duży strit"];
+    const isChanceOrSimilar = ["Szansa", "Trzy jednakowe", "Cztery jednakowe"].includes(pole);
 
-    if (mapaWartosciGorne[pole]) {
-      const wymaganaWartosc = 5 * mapaWartosciGorne[pole];
-      if (wartosc === wymaganaWartosc) {
-        autoAddBonus = true; 
-      } else if (wartosc === 0) {
-        needsConfirm = true; 
-      }
-    } else if (polesWith5OfAKind.includes(pole) && [5, 10, 15, 20, 25, 30].includes(wartosc)) {
-      needsConfirm = true;
-    } else if (!polesWith5OfAKind.includes(pole) && !mapaWartosciGorne[pole]) {
-      const maxValue = Math.max(...pola[pole]);
-      if (wartosc === maxValue && wartosc > 0) {
-        needsConfirm = true;
-      }
+    // Checking whether it is a roll worth 5 identical dice
+    let isFiveOfAKind = false;
+    if (mapaWartosciGorne[pole] && wartosc === 5 * mapaWartosciGorne[pole]) {
+      isFiveOfAKind = true;
+    } else if ((polesWithFixedValue.includes(pole) || isChanceOrSimilar) && wartosc > 0 && wartosc % 5 === 0) {
+      isFiveOfAKind = true;
     }
 
-    // If the player confirms the Joker in the BOTTOM section, we verify the top and add a warning
-    if (needsConfirm && !mapaWartosciGorne[pole]) {
-      let wolneWartosci = [];
-      
-      for (let p in mapaWartosciGorne) {
-        const wierszGory = document.querySelector(`tr[data-pole="${p}"]`);
-        if (wierszGory) {
-          const komorkaGory = wierszGory.cells[gracz + 1];
-          // If the cell is not locked, it means the field is free
-          if (komorkaGory && !komorkaGory.classList.contains('zablokowane')) {
-            wolneWartosci.push(mapaWartosciGorne[p]);
-          }
-        }
-      }
-      
-      // If there are empty fields at the top, add text to the question
-      if (wolneWartosci.length > 0) {
-        const tekstWartosci = wolneWartosci.join(" ] [ ");
-        // We add a stylish HTML block with a warning
-        confirmMessage += `<br><br><div style="background: #fff3cd; color: #856404; padding: 12px; border-left: 4px solid #ffc107; border-radius: 4px; font-size: 0.85em; text-align: left; line-height: 1;">
-          <div style="font-size: 1.2em; font-weight: bold; margin: 0 0 10px 0; padding: 0;">⚠️ Przypomnienie - Zasada Jokera:</div>
-          <div style="margin: 0;">Z Jokera możesz skorzystać tylko wtedy, gdy pole
-          w górnej części tabeli dla wyrzuconych oczek jest zajęte. Masz wciąż wolne kategorie:</div>
-          <div style="font-size: 1.5em; color: #d32f2f; font-weight: bold; margin: 8px 0; text-align: center;">[ ${tekstWartosci} ]</div>
-          <div style="margin: 0;">Jeśli Twój Generał składa się z wymienionych kategorii, <strong>MUSISZ</strong> wpisać go w górnej części tabeli!</div>
-          </div>`;
-        }
-    }
-
-    if (autoAddBonus) {
-      const snap = createSnapshot();
-      generałWynik[gracz] += 100;
-      const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
-      if (generalRow) {
-        const generalCell = generalRow.cells[gracz + 1];
-        if (generalCell) {
-          generalCell.innerText = generałWynik[gracz];
-          generalCell.classList.add("zablokowane");
-        }
-      }
-      undoStack.push(snap);
-      finishSave();
-      return;
-    }
-
-    if (needsConfirm) {
-      showInlineConfirm(confirmMessage, () => {
+    if (isFiveOfAKind) {
+      // CASE A: Upper section (e.g., Fives for 25) -> AUTOMATIC BONUS
+      if (mapaWartosciGorne[pole]) {
         const snap = createSnapshot();
         generałWynik[gracz] += 100;
         const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
@@ -1884,16 +1832,35 @@ function zapisz(wartosc) {
         }
         undoStack.push(snap);
         finishSave();
-      }, () => {
-        const snap = createSnapshot();
-        undoStack.push(snap);
-        finishSave();
-      });
-      return;
+        return; 
+      } 
+      
+      // CASE B: Lower section -> JOKER MODAL
+      else {
+        showSmartJokerModal(pole, gracz, () => {
+          const snap = createSnapshot();
+          generałWynik[gracz] += 100;
+          const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
+          if (generalRow) {
+            const generalCell = generalRow.cells[gracz + 1];
+            if (generalCell) {
+              generalCell.innerText = generałWynik[gracz];
+              generalCell.classList.add("zablokowane");
+            }
+          }
+          undoStack.push(snap);
+          finishSave();
+        }, () => {
+          const snap = createSnapshot();
+          undoStack.push(snap);
+          finishSave();
+        });
+        return;
+      }
     }
   }
 
-  // Standard save for any field without bonus implications
+  // 3. SIMPLE RECORD (if none of the above conditions are met)
   const snap = createSnapshot();
   undoStack.push(snap);
   finishSave();
@@ -2536,51 +2503,303 @@ function showRulesModal() {
   
   const body = document.createElement('div');
   body.className = 'stats-body rules-body';
-  // Wyjustowanie i poprawa czytelności
-  body.style.textAlign = 'justify';
-  body.style.lineHeight = '1.6';
-  body.style.padding = '0 10px';
-  body.style.hyphens = 'auto'; // Pomaga z przełamywaniem długich słów przy justowaniu
   
+  const fixPolish = (text) => {
+    return text.replace(/\b([aiouwzAIOUWZ])\s+/g, '$1&nbsp;');
+  };
+
   body.innerHTML = `
-    <h3 style="margin-top:0; color: #1976d2; text-align: left;">Przebieg rundy</h3>
-    <p>Gra składa się z 13 kolejek. W swojej turze gracz ma do dyspozycji <strong>maksymalnie 3 rzuty</strong> pięcioma kostkami. Po pierwszym i drugim rzucie można zatrzymać wybrane kości, przerzucając resztę. Po zakończeniu rzutów wynik <strong>musi</strong> zostać wpisany do jednej z wolnych kategorii. Jeśli układ nie pasuje do żadnej z nich, gracz musi "wykreślić" wybrane pole, wpisując 0 pkt.</p>
+    <h3 class="rule-section-title">📜 Wstęp do gry</h3>
 
-    <h3 style="color: #1976d2; text-align: left;">Punktacja układów</h3>
-    <ul style="padding-left: 20px; margin-bottom: 20px; text-align: left;">
-      <li><strong>Górna sekcja (1-6):</strong> Suma oczek z kostek o wybranej wartości (np. trzy czwórki = 12 pkt).<br>
-      <em><strong>Premia (+35 pkt)</strong>: Przyznawana automatycznie, jeśli suma z górnej sekcji wyniesie min. 63 pkt.</em></li>
-      <li><strong>3 / 4 jednakowe:</strong> Suma oczek ze wszystkich 5 kości.</li>
-      <li><strong>Full:</strong> 25 pkt (3 jednakowe kości + 2 inne jednakowe).</li>
-      <li><strong>Mały strit:</strong> 30 pkt (4 kolejne kości, np. 1-2-3-4).</li>
-      <li><strong>Duży strit:</strong> 40 pkt (5 kolejnych kości).</li>
-      <li><strong>Szansa:</strong> Suma wszystkich oczek (dowolny układ).</li>
-      <li><strong>Generał:</strong> 50 pkt (5 jednakowych kości).</li>
-    </ul>
+    <div class="rule-card-container">
+      <div class="rule-card-header">
+        <span class="rule-card-title">Mechanika Rozgrywki</span>
+        <span class="rule-badge rule-badge-dark">13 Kolejek</span>
+      </div>
 
-    <h3 style="color: #1976d2; text-align: left;">Kolejny Generał (Premia i Joker)</h3>
-    <p>Za każdego kolejnego wyrzuconego Generała gracz otrzymuje <strong>100 punktów premii</strong> (pod warunkiem, że pole "Generał" jest już wypełnione wynikiem 50 pkt). Taki układ działa wtedy jak "Joker" i można go zapisać w dolnej sekcji za pełną wartość (np. jako Full za 25 pkt lub Strit za 40 pkt).</p>
+      <div class="rule-step-list">
+        <!-- Kafel 1: Rzuty -->
+        <div class="rule-step-card blue">
+          <div class="rule-step-title blue"><span style="font-size: 1.2em;">🎲</span> 1. Etap Rzutów</div>
+          <div class="rule-step-text rule-text-justify">
+            ${fixPolish("Każdą turę zaczynasz rzutem pełnym zestawem 5 kostek. W dwóch kolejnych (opcjonalnych) próbach możesz zatrzymać wybrane kostki, a resztą rzucić ponownie, by poprawić układ.")}
+          </div>
+        </div>
+
+        <!-- Kafel 2: Zapis -->
+        <div class="rule-step-card red">
+          <div class="rule-step-title red"><span style="font-size: 1.2em;">✍️</span> 2. Werdykt</div>
+          <div class="rule-step-text rule-text-justify">
+            ${fixPolish("Po zakończeniu rzutów przypisujesz wynik do jednej z 13 kategorii w tabeli. Raz dokonany wpis jest nieodwołalny i permanentnie zamyka daną kategorię.")}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="rule-section-title">📊 Tabela Wyników</h3>
+
+    <div class="rule-card-container">
+      <div class="rule-card-header">
+        <span class="rule-card-title">Kategorie Punktowe</span>
+        <span class="rule-badge rule-badge-dark">13 Pól</span>
+      </div>
+
+      <!-- Etykieta: SEKCJA GÓRNA -->
+      <div class="rule-section-label blue">Sekcja Górna (Cyfry 1-6)</div>
+
+      <!-- Karta: SEKCJA GÓRNA -->
+      <div class="rule-category-card blue">
+        <div class="rule-cat-header">
+          <span class="rule-cat-title">Jedynki — Szóstki</span>
+          <span class="rule-cat-badge blue">Suma wybranej cyfry</span>
+        </div>
+        <div class="rule-cat-desc">
+          ${fixPolish("Wpisujesz sumę oczek wyłącznie z kostek wskazujących wybraną liczbę. Pozostałe kostki w układzie są ignorowane.")}
+        </div>
+        <div class="rule-example-row">
+          <span class="rule-example-label">Np. Kategoria "Czwórki":</span>
+          <div class="rule-dice-group">
+            <div class="rule-dice sm blue-active">4</div>
+            <div class="rule-dice sm blue-active">4</div>
+            <div class="rule-dice sm blue-active">4</div>
+            <div class="rule-dice sm inactive">1</div>
+            <div class="rule-dice sm inactive">5</div>
+          </div>
+          <span class="rule-score-total">= 12 pkt</span>
+        </div>
+        <div class="rule-bonus-box">
+          <div class="rule-bonus-icon">🎁</div>
+          <div>
+            <div class="rule-bonus-title">Premia: +35 pkt</div>
+            <div class="rule-bonus-desc">
+              ${fixPolish("Zdobądź łącznie minimum 63 punkty we wszystkich sześciu kategoriach górnej sekcji, aby system doliczył premię.")}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Etykieta: SEKCJA DOLNA -->
+      <div class="rule-section-label dark">Sekcja Dolna (Układy)</div>
+
+      <!-- Karty: SEKCJA DOLNA (Grid) -->
+      <div class="rule-category-grid">
+        ${[
+          { n: "3 / 4 Jednakowe", s: "Suma oczek", c: "#607d8b", d: "Suma ze wszystkich 5 kostek. Wymagane uzyskanie minimum 3 lub 4 takich samych oczek.", ex:[{v:4, h:true}, {v:4, h:true}, {v:4, h:true}, {v:1, h:false}, {v:6, h:false}] },
+          { n: "Full", s: "25 pkt", c: "#9b59b6", d: "Układ składający się z 3 jednakowych oraz 2 innych jednakowych oczek.", ex:[{v:5, h:true}, {v:5, h:true}, {v:5, h:true}, {v:2, h:true}, {v:2, h:true}] },
+          { n: "Mały Strit", s: "30 pkt", c: "#3498db", d: "Sekwencja 4 kolejnych oczek (w dowolnym przedziale).", ex:[{v:1, h:true}, {v:2, h:true}, {v:3, h:true}, {v:4, h:true}, {v:6, h:false}] },
+          { n: "Duży Strit", s: "40 pkt", c: "#e67e22", d: "Sekwencja 5 kolejnych oczek (idealny ciąg).", ex:[{v:1, h:true}, {v:2, h:true}, {v:3, h:true}, {v:4, h:true}, {v:5, h:true}] },
+          { n: "Generał", s: "50 pkt", c: "#d4ac0d", d: "Najwyższy status punktowy: 5 jednakowych liczb na wszystkich kostkach.", ex:[{v:6, h:true}, {v:6, h:true}, {v:6, h:true}, {v:6, h:true}, {v:6, h:true}] },
+          { n: "Szansa", s: "Suma oczek", c: "#1abc9c", d: "Bezwarunkowa suma wszystkich oczek z bieżącego rzutu – niezależnie od układu.", ex:[{v:2, h:true}, {v:6, h:true}, {v:3, h:true}, {v:5, h:true}, {v:1, h:true}] }
+        ].map(item => `
+          <div class="rule-category-card grid-item" style="--cat-color: ${item.c}; --cat-color-alpha: ${item.c}22;">
+            <div class="rule-cat-header">
+              <span class="rule-cat-title">${item.n}</span>
+              <span class="rule-cat-badge dynamic">
+                ${item.s}
+              </span>
+            </div>
+            <div class="rule-cat-desc">
+              ${fixPolish(item.d)}
+            </div>
+            <div class="rule-example-row no-margin">
+              <span class="rule-example-label">Przykład:</span>
+              <div class="rule-dice-group">
+                ${item.ex.map(dice => `
+                  <div class="rule-dice sm ${dice.h ? 'dynamic-active' : 'inactive'}">${dice.v}</div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <h3 class="rule-section-title red">🃏 Zasada Generała i Jokera</h3>
+
+    <div class="rule-card-container red">
+      <div class="rule-card-header red">
+        <span class="rule-card-title red">Procedura Jokera</span>
+        <span class="rule-badge rule-badge-red">Bonus +100 pkt</span>
+      </div>
+
+      <div class="rule-joker-intro">
+        ${fixPolish("Gdy wyrzucisz kolejnego Generała (a Twoje pole Generał jest już zajęte wynikiem 50 pkt), aktywuje się ten potężny bonus. Twój układ staje się Jokerem, którego zapisujesz w jednym z dwóch poniższych kroków:")}
+      </div>
+
+      <div class="rule-joker-example-box">
+        <span class="rule-example-label red">Przykład rzutu:</span>
+        <div class="rule-dice-group">
+          ${[5,5,5,5,5].map(n => `<div class="rule-dice md red-active">${n}</div>`).join('')}
+        </div>
+      </div>
+
+      <div class="rule-step-list">
+        <!-- Kafel Krok 1 -->
+        <div class="rule-step-card light-blue">
+          <div class="rule-step-title blue">
+            <div class="rule-step-circle blue">1</div>
+            Wymóg Góry
+          </div>
+          <div class="rule-step-text indented rule-text-justify">
+            ${fixPolish("Zawsze najpierw sprawdzasz sekcję górną. Jeśli pole dla wyrzuconych kostek jest wolne, musisz je tam wpisać.")}
+          </div>
+          <div class="rule-example-result blue">
+            <strong class="rule-example-result-title">Przykład dla 5-tek:</strong>
+            Kategoria "Piątki" wolna ➔ Wpisujesz tam: <br>
+            <span class="rule-example-result-score">25 pkt + 100 pkt bonusu</span>
+          </div>
+        </div>
+
+        <!-- Kafel Krok 2 -->
+        <div class="rule-step-card purple">
+          <div class="rule-step-title purple">
+            <div class="rule-step-circle purple">2</div>
+            Joker w Dole
+          </div>
+          <div class="rule-step-text indented rule-text-justify">
+            ${fixPolish("Jeśli górne pole (np. Piątki) było już wcześniej zajęte, masz wolną rękę! Zapisujesz układ w dowolnej wolnej kategorii w sekcji dolnej (tej z układami).")}
+          </div>
+          <div class="rule-example-result purple">
+            <strong class="rule-example-result-title">Przykład:</strong>
+            Wybierasz "Duży Strit" ➔ Wpisujesz tam: <br>
+            <span class="rule-example-result-score">40 pkt + 100 pkt bonusu = 140 pkt</span>
+          </div>
+        </div>
+      </div>
+    </div>
     
-    <div style="background: #fff3cd; color: #856404; padding: 15px; border-left: 5px solid #ffc107; margin-top: 20px; border-radius: 6px; font-size: 0.9em; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-      <strong style="font-size: 1.1em; display: block; text-align: left; margin-bottom: 8px;">⚠️ ZASADA JOKERA W APLIKACJI</strong>
-      Oficjalne zasady mówią, że aby użyć Generała jako "Jokera" w dolnej sekcji, kategoria w górnej części tabeli odpowiadająca wyrzuconym oczkom (np. pole "Piątki") <strong>musi być już uprzednio zajęte</strong>.<br><br>
-      <em>Ponieważ Kości to aplikacja pełniąca funkcję cyfrowego notesu, nie widzi ona rzutów na Twoim stole i <strong>nie wymusza tej blokady</strong>. To gracze przy stole sami decydują i pilnują honorowo tego, czy rzut spełnia oficjalne wymogi użycia Jokera.</em>
+    <h3 class="rule-section-title">🏁 Podsumowanie</h3>
+
+    <div class="rule-card-container">
+      <div class="rule-card-header">
+        <span class="rule-card-title">Finał Partii</span>
+        <span class="rule-badge rule-badge-green">Koniec Gry</span>
+      </div>
+
+      <div class="rule-step-card green">
+        <div class="rule-step-text rule-text-justify">
+          ${fixPolish("Gra dobiega końca w momencie, gdy wszyscy gracze uzupełnią komplet 13 kategorii na swoich kartach wyników. System podlicza wtedy wszystkie punkty, uwzględniając bonusy za sekcję górną oraz premie za dodatkowe Generały. Zwycięzcą zostaje osoba, która uzyska najwyższą sumę końcową.")}
+        </div>
+      </div>
+
+      <div class="rule-step-card info">
+        <div class="rule-tip-box">
+          <div class="rule-tip-icon">💡</div>
+          <div class="rule-tip-text rule-text-justify">
+            <strong class="rule-tip-title">Wskazówka systemowa:</strong>
+            ${fixPolish("Aplikacja w pełni automatyzuje proces liczenia punktów. Bonusy za sekcję górną (+35) oraz premie za kolejne Generały (+100) są doliczane natychmiast po spełnieniu warunków. Pamiętaj: jeśli system poprosi Cię o wskazanie cyfr przy Jokerze, robi to po to, aby upewnić się, że Twój ruch jest zgodny z oficjalnymi zasadami gry.")}
+          </div>
+        </div>
+      </div>
     </div>
   `;
-  
-  modalContent.appendChild(body);
-  
+
   const buttons = document.createElement('div');
   buttons.className = 'stats-buttons';
-  
   const backBtn = document.createElement('button');
-  backBtn.innerText = 'Zrozumiałem';
-  backBtn.onclick = () => { modal.remove(); };
+  backBtn.innerText = 'Zamknij';
+  backBtn.onclick = () => modal.remove();
   buttons.appendChild(backBtn);
   
+  modalContent.appendChild(body);
   modalContent.appendChild(buttons);
   modal.appendChild(modalContent);
   document.body.appendChild(modal);
-  
   setTimeout(() => modal.classList.add('aktywny'), 0);
+}
+
+// ---SMART JOKER VERIFICER ---
+function showSmartJokerModal(pole, gracz, onJokerSelect, onNormalSelect) {
+  const existingOverlay = document.body.querySelector('.confirm-overlay');
+  if (existingOverlay) existingOverlay.remove();
+
+  // 1. Overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 2900; backdrop-filter: blur(2px); transition: opacity 0.2s;';
+  document.body.appendChild(overlay);
+
+  // 2. Close support (Click outside window or Escape)
+  const closeModal = () => {
+    overlay.remove();
+    document.removeEventListener('keydown', handleEsc);
+  };
+
+  const handleEsc = (e) => {
+    if (e.key === 'Escape') closeModal();
+  };
+
+  overlay.onclick = (e) => {
+    if (e.target === overlay) closeModal();
+  };
+
+  document.addEventListener('keydown', handleEsc);
+
+  // 3. Window (Box)
+  const box = document.createElement('div');
+  box.className = 'smart-joker-box';
+  box.onclick = (e) => e.stopPropagation(); // Blocks closing when clicked inside the window
+
+  box.innerHTML = `
+    <h3 style="margin: 0;">🃏 Zasada Jokera</h3>
+    <p style="margin: 0 0 18px 0; color: #666; font-size: 0.9em;">Czy to kolejny Generał (+100 pkt)?</p>
+  `;
+
+  // 4. Button: Regular Throw
+  const btnNormal = document.createElement('button');
+  btnNormal.className = 'menu-btn play btn-joker-yes btn-main-normal'; 
+  btnNormal.style.width = "100%";
+  btnNormal.style.marginBottom = "18px";
+  btnNormal.style.padding = "16px 10px";
+  btnNormal.innerText = `Zapisz jako: ${pole}`; 
+  btnNormal.onclick = () => { closeModal(); onNormalSelect(); };
+  box.appendChild(btnNormal);
+
+  // 5. Joker Network
+  const jokerGrid = document.createElement('div');
+  jokerGrid.style.display = "grid";
+  jokerGrid.style.gridTemplateColumns = "1fr 1fr";
+  jokerGrid.style.gap = "10px";
+
+  const mapaNazwNaNumer = { "Jedynki": 1, "Dwójki": 2, "Trójki": 3, "Czwórki": 4, "Piątki": 5, "Szóstki": 6 };
+  
+  for (let p in mapaNazwNaNumer) {
+    const nr = mapaNazwNaNumer[p];
+    const wierszGory = document.querySelector(`tr[data-pole="${p}"]`);
+    const komorkaGory = wierszGory ? wierszGory.cells[gracz + 1] : null;
+    const czyMozeBycJokerem = komorkaGory && komorkaGory.classList.contains('zablokowane');
+
+    const btnJoker = document.createElement('button');
+    btnJoker.style.padding = "10px 5px";
+    btnJoker.style.fontWeight = "bold";
+
+    if (czyMozeBycJokerem) {
+      btnJoker.className = 'btn-joker-joker';
+      btnJoker.innerHTML = `
+        <span class="status-text">Joker</span>
+        <span class="dice-number">${nr}</span>
+      `;
+      btnJoker.onclick = () => { closeModal(); onJokerSelect(); };
+    } else {
+      btnJoker.className = 'btn-joker-disabled';
+      btnJoker.innerHTML = `
+        <span class="status-text">Wolne</span>
+        <span class="dice-number">${nr}</span>
+      `;
+    }
+    jokerGrid.appendChild(btnJoker);
+  }
+  box.appendChild(jokerGrid);
+
+  // 6. Button: Cancel
+  const btnCancel = document.createElement('button');
+  btnCancel.className = 'btn-joker-no';
+  btnCancel.style.marginTop = "20px";
+  btnCancel.style.width = "100%";
+  btnCancel.style.padding = "12px";
+  btnCancel.innerText = 'Cofnij ruch';
+  btnCancel.onclick = closeModal;
+  box.appendChild(btnCancel);
+
+  overlay.appendChild(box);
 }
