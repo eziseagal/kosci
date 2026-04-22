@@ -1719,10 +1719,34 @@ input[type="number"] {
 }
 
 .smart-joker-box .btn-joker-joker {
-    background: linear-gradient(135deg, #ffa726 0%, #fb8c00 100%) !important;
+    background: linear-gradient(135deg, #f6ad55 0%, #dd6b20 100%) !important;
     color: white !important;
-    box-shadow: 0 3px 10px rgba(76, 175, 80, 0.4) !important;
+    border: none !important;
+    border-radius: 8px !important;
+    box-shadow: 0 3px 10px rgba(221, 107, 32, 0.4) !important;
     cursor: pointer;
+    font-size: 0.95em !important;
+    transition: transform 0.1s;
+}
+
+.smart-joker-box .btn-joker-free {
+    background: #f8f9fa !important;
+    color: #a0a0a0 !important;
+    border: 1px dashed #cbd5e0 !important;
+    border-radius: 8px !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+    font-size: 0.85em !important;
+}
+
+.smart-joker-box .btn-joker-invalid {
+    background: #fff5f5 !important;
+    color: #fc8181 !important;
+    border: 1px solid #fed7d7 !important;
+    border-radius: 8px !important;
+    cursor: not-allowed;
+    opacity: 0.8;
+    font-size: 0.85em !important;
 }
 
 .smart-joker-box .btn-joker-disabled {
@@ -1854,6 +1878,7 @@ input[type="number"] {
 .rule-step-title.blue { color: #2b6cb0; }
 .rule-step-title.red { color: #c53030; }
 .rule-step-title.purple { color: #6b46c1; }
+.rule-step-title.green { color: #276749; }
 
 .rule-step-text {
   color: #2d3748;

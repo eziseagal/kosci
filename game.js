@@ -1807,13 +1807,13 @@ function zapisz(wartosc) {
   // 2. BONUS LOGIC +100 (For a player who already has a General for 50 points)
   if (generałLicznik[gracz] > 0 && generałWynik[gracz] >= 50 && pole !== "Generał") {
     const polesWithFixedValue = ["Full", "Mały strit", "Duży strit"];
-    const isChanceOrSimilar = ["Szansa", "Trzy jednakowe", "Cztery jednakowe"].includes(pole);
+    const chanceOrSimilar =["Szansa", "Trzy jednakowe", "Cztery jednakowe"];
 
     // Checking whether it is a roll worth 5 identical dice
     let isFiveOfAKind = false;
     if (mapaWartosciGorne[pole] && wartosc === 5 * mapaWartosciGorne[pole]) {
       isFiveOfAKind = true;
-    } else if ((polesWithFixedValue.includes(pole) || isChanceOrSimilar) && wartosc > 0 && wartosc % 5 === 0) {
+    } else if ((polesWithFixedValue.includes(pole) || chanceOrSimilar.includes(pole)) && wartosc > 0 && wartosc % 5 === 0) {
       isFiveOfAKind = true;
     }
 
@@ -1835,32 +1835,74 @@ function zapisz(wartosc) {
         return; 
       } 
       
-      // CASE B: Lower section -> JOKER MODAL
+      // CASE B: Lower section -> JOKER MODAL VERIFICATION
       else {
-        showSmartJokerModal(pole, gracz, () => {
-          const snap = createSnapshot();
-          generałWynik[gracz] += 100;
-          const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
-          if (generalRow) {
-            const generalCell = generalRow.cells[gracz + 1];
-            if (generalCell) {
-              generalCell.innerText = generałWynik[gracz];
-              generalCell.classList.add("zablokowane");
+        let shouldShowModal = false;
+        let wyliczonaKostka = null; // NOWOŚĆ: Pamiętamy konkretną kostkę
+
+        // Funkcja pomocnicza: sprawdza, czy konkretne pole na górze jest zajęte
+        const czyGorneZajete = (nazwaPola) => {
+          const wiersz = document.querySelector(`tr[data-pole="${nazwaPola}"]`);
+          return wiersz && wiersz.cells[gracz + 1].classList.contains('zablokowane');
+        };
+
+        // 1. Sprawdzenie dla: Trzy jednakowe, Cztery jednakowe, Szansa
+        if (chanceOrSimilar.includes(pole)) {
+          // Wyliczamy, jaka to była kostka (np. 25 pkt / 5 = 5)
+          const wartoscKostki = wartosc / 5;
+          const nazwaGorna = Object.keys(mapaWartosciGorne).find(k => mapaWartosciGorne[k] === wartoscKostki);
+          
+          // Uruchom modal TYLKO, gdy pole dla tej konkretnej kostki jest zajęte na górze
+          if (nazwaGorna && czyGorneZajete(nazwaGorna)) {
+            shouldShowModal = true;
+            wyliczonaKostka = wartoscKostki; // Przekazujemy tę cyfrę (np. 5) do modala!
+          }
+        } 
+        // 2. Sprawdzenie dla: Full, Mały strit, Duży strit
+        else if (polesWithFixedValue.includes(pole)) {
+          let isMaxValue = false;
+          if (pole === "Full" && wartosc === 25) isMaxValue = true;
+          if (pole === "Mały strit" && wartosc === 30) isMaxValue = true;
+          if (pole === "Duży strit" && wartosc === 40) isMaxValue = true;
+
+          if (isMaxValue) {
+            // Tu nie wiemy, z jakiej kostki zrobiono Strita, więc pozwalamy na dowolną zajętą z góry
+            const jakiekolwiekGorneZajete = Object.keys(mapaWartosciGorne).some(nazwa => czyGorneZajete(nazwa));
+            if (jakiekolwiekGorneZajete) {
+              shouldShowModal = true;
+              wyliczonaKostka = null; // Brak sprecyzowanej kostki = podświetl wszystkie zajęte
             }
           }
-          undoStack.push(snap);
-          finishSave();
-        }, () => {
-          const snap = createSnapshot();
-          undoStack.push(snap);
-          finishSave();
-        });
-        return;
+        }
+
+        // OSTATECZNA DECYZJA: Odpalamy modal
+        if (shouldShowModal) {
+          // UWAGA: Przekazujemy parametr wyliczonaKostka do funkcji
+          showSmartJokerModal(pole, gracz, wyliczonaKostka, () => {
+            const snap = createSnapshot();
+            generałWynik[gracz] += 100;
+            const generalRow = document.querySelector(`tr[data-pole="Generał"]`);
+            if (generalRow) {
+              const generalCell = generalRow.cells[gracz + 1];
+              if (generalCell) {
+                generalCell.innerText = generałWynik[gracz];
+                generalCell.classList.add("zablokowane");
+              }
+            }
+            undoStack.push(snap);
+            finishSave();
+          }, () => {
+            const snap = createSnapshot();
+            undoStack.push(snap);
+            finishSave();
+          });
+          return;
+        }
       }
     }
   }
 
-  // 3. SIMPLE RECORD (if none of the above conditions are met)
+  // 3. SIMPLE RECORD (Simple record -if it was not a General, or the system decided that Joker is not possible here)
   const snap = createSnapshot();
   undoStack.push(snap);
   finishSave();
@@ -2634,19 +2676,20 @@ function showRulesModal() {
       </div>
 
       <div class="rule-step-list">
+        
         <!-- Kafel Krok 1 -->
         <div class="rule-step-card light-blue">
           <div class="rule-step-title blue">
             <div class="rule-step-circle blue">1</div>
-            Wymóg Góry
+            Priorytet Sekcji Górnej
           </div>
           <div class="rule-step-text indented rule-text-justify">
-            ${fixPolish("Zawsze najpierw sprawdzasz sekcję górną. Jeśli pole dla wyrzuconych kostek jest wolne, musisz je tam wpisać.")}
+            ${fixPolish("W pierwszej kolejności weryfikujesz sekcję górną. Jeśli kategoria odpowiadająca wyrzuconym oczkom jest wciąż wolna, masz obowiązek przypisać wynik właśnie do niej.")}
           </div>
           <div class="rule-example-result blue">
-            <strong class="rule-example-result-title">Przykład dla 5-tek:</strong>
-            Kategoria "Piątki" wolna ➔ Wpisujesz tam: <br>
-            <span class="rule-example-result-score">25 pkt + 100 pkt bonusu</span>
+            <strong class="rule-example-result-title">Przykład dla pięciu 5-tek:</strong>
+            Kategoria "Piątki" jest wolna ➔ Rejestrujesz wynik: <br>
+            <span class="rule-example-result-score">25 pkt + 100 pkt premii</span>
           </div>
         </div>
 
@@ -2654,35 +2697,40 @@ function showRulesModal() {
         <div class="rule-step-card purple">
           <div class="rule-step-title purple">
             <div class="rule-step-circle purple">2</div>
-            Joker w Dole
+            Joker w Sekcji Dolnej
           </div>
           <div class="rule-step-text indented rule-text-justify">
-            ${fixPolish("Jeśli górne pole (np. Piątki) było już wcześniej zajęte, masz wolną rękę! Zapisujesz układ w dowolnej wolnej kategorii w sekcji dolnej (tej z układami).")}
+            ${fixPolish("Jeśli dedykowane pole w sekcji górnej zostało już wcześniej wykorzystane, zyskujesz pełną swobodę. Rzut działa jako Joker i może zostać zapisany w dowolnej wolnej kategorii układów na dole.")}
           </div>
           <div class="rule-example-result purple">
-            <strong class="rule-example-result-title">Przykład:</strong>
-            Wybierasz "Duży Strit" ➔ Wpisujesz tam: <br>
-            <span class="rule-example-result-score">40 pkt + 100 pkt bonusu = 140 pkt</span>
+            <strong class="rule-example-result-title">Przykład użycia Jokera:</strong>
+            Wybierasz wolny "Duży Strit" ➔ Rejestrujesz wynik: <br>
+            <span class="rule-example-result-score">40 pkt + 100 pkt premii = 140 pkt</span>
           </div>
-        </div>
+        </div>        
       </div>
     </div>
-    
+
     <h3 class="rule-section-title">🏁 Podsumowanie</h3>
 
     <div class="rule-card-container">
       <div class="rule-card-header">
         <span class="rule-card-title">Finał Partii</span>
-        <span class="rule-badge rule-badge-green">Koniec Gry</span>
+        <!-- POPRAWKA: Klasa zmieniona na "rule-badge green" -->
+        <span class="rule-badge green">Koniec Gry</span>
       </div>
 
       <div class="rule-step-card green">
+        <!-- DODANE: Nagłówek z ikoną, żeby pasowało do wcześniejszych sekcji -->
+        <div class="rule-step-title green">
+          <span style="font-size: 1.2em;">🏆</span> Zakończenie i Punktacja
+        </div>
         <div class="rule-step-text rule-text-justify">
           ${fixPolish("Gra dobiega końca w momencie, gdy wszyscy gracze uzupełnią komplet 13 kategorii na swoich kartach wyników. System podlicza wtedy wszystkie punkty, uwzględniając bonusy za sekcję górną oraz premie za dodatkowe Generały. Zwycięzcą zostaje osoba, która uzyska najwyższą sumę końcową.")}
         </div>
       </div>
 
-      <div class="rule-step-card info">
+      <div class="rule-step-card info" style="margin-bottom: 0;">
         <div class="rule-tip-box">
           <div class="rule-tip-icon">💡</div>
           <div class="rule-tip-text rule-text-justify">
@@ -2709,7 +2757,7 @@ function showRulesModal() {
 }
 
 // ---SMART JOKER VERIFICER ---
-function showSmartJokerModal(pole, gracz, onJokerSelect, onNormalSelect) {
+function showSmartJokerModal(pole, gracz, specificDice, onJokerSelect, onNormalSelect) {
   const existingOverlay = document.body.querySelector('.confirm-overlay');
   if (existingOverlay) existingOverlay.remove();
 
@@ -2719,33 +2767,26 @@ function showSmartJokerModal(pole, gracz, onJokerSelect, onNormalSelect) {
   overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 2900; backdrop-filter: blur(2px); transition: opacity 0.2s;';
   document.body.appendChild(overlay);
 
-  // 2. Close support (Click outside window or Escape)
+  // 2. Obsługa zamykania (Kliknięcie poza okno lub Escape)
   const closeModal = () => {
     overlay.remove();
     document.removeEventListener('keydown', handleEsc);
   };
-
-  const handleEsc = (e) => {
-    if (e.key === 'Escape') closeModal();
-  };
-
-  overlay.onclick = (e) => {
-    if (e.target === overlay) closeModal();
-  };
-
+  const handleEsc = (e) => { if (e.key === 'Escape') closeModal(); };
+  overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
   document.addEventListener('keydown', handleEsc);
 
-  // 3. Window (Box)
+  // 3. Okno (Box)
   const box = document.createElement('div');
   box.className = 'smart-joker-box';
-  box.onclick = (e) => e.stopPropagation(); // Blocks closing when clicked inside the window
+  box.onclick = (e) => e.stopPropagation(); 
 
   box.innerHTML = `
-    <h3 style="margin: 0;">🃏 Zasada Jokera</h3>
+    <h3 style="margin: 0 0 5px 0; color: #1a252f;">🃏 Zasada Jokera</h3>
     <p style="margin: 0 0 18px 0; color: #666; font-size: 0.9em;">Czy to kolejny Generał (+100 pkt)?</p>
   `;
 
-  // 4. Button: Regular Throw
+  // 4. Przycisk: Zwykły rzut (NA GÓRZE, tak jak prosiłeś)
   const btnNormal = document.createElement('button');
   btnNormal.className = 'menu-btn play btn-joker-yes btn-main-normal'; 
   btnNormal.style.width = "100%";
@@ -2755,7 +2796,7 @@ function showSmartJokerModal(pole, gracz, onJokerSelect, onNormalSelect) {
   btnNormal.onclick = () => { closeModal(); onNormalSelect(); };
   box.appendChild(btnNormal);
 
-  // 5. Joker Network
+  // 5. Siatka Jokerów
   const jokerGrid = document.createElement('div');
   jokerGrid.style.display = "grid";
   jokerGrid.style.gridTemplateColumns = "1fr 1fr";
@@ -2767,31 +2808,57 @@ function showSmartJokerModal(pole, gracz, onJokerSelect, onNormalSelect) {
     const nr = mapaNazwNaNumer[p];
     const wierszGory = document.querySelector(`tr[data-pole="${p}"]`);
     const komorkaGory = wierszGory ? wierszGory.cells[gracz + 1] : null;
-    const czyMozeBycJokerem = komorkaGory && komorkaGory.classList.contains('zablokowane');
+    
+    const jestZablokowane = komorkaGory && komorkaGory.classList.contains('zablokowane');
+    
+    // Ustalanie stanu danej kostki
+    let stan = "wolne"; // Domyślnie pole u góry jest puste
+
+    if (jestZablokowane) {
+      if (specificDice !== null) {
+        if (nr === specificDice) {
+          stan = "joker"; // Pole zajęte i matematyka się zgadza
+        } else {
+          stan = "niezgodne"; // Pole zajęte, ale to inna cyfra niż wpisany wynik
+        }
+      } else {
+        stan = "joker"; // Dla Full/Strit każde zajęte pole jest dobre
+      }
+    }
 
     const btnJoker = document.createElement('button');
     btnJoker.style.padding = "10px 5px";
     btnJoker.style.fontWeight = "bold";
 
-    if (czyMozeBycJokerem) {
+    // Generowanie wyglądu na podstawie stanu
+    if (stan === "joker") {
       btnJoker.className = 'btn-joker-joker';
       btnJoker.innerHTML = `
-        <span class="status-text">Joker</span>
+        <span class="status-text" style="color: rgba(255,255,255,0.9);">Joker</span>
         <span class="dice-number">${nr}</span>
       `;
       btnJoker.onclick = () => { closeModal(); onJokerSelect(); };
-    } else {
-      btnJoker.className = 'btn-joker-disabled';
+      
+    } else if (stan === "niezgodne") {
+      btnJoker.className = 'btn-joker-invalid';
+      btnJoker.innerHTML = `
+        <span class="status-text">Niezgodne</span>
+        <span class="dice-number" style="text-decoration: line-through;">${nr}</span>
+      `;
+      
+    } else if (stan === "wolne") {
+      btnJoker.className = 'btn-joker-free';
       btnJoker.innerHTML = `
         <span class="status-text">Wolne</span>
         <span class="dice-number">${nr}</span>
       `;
     }
+    
     jokerGrid.appendChild(btnJoker);
   }
   box.appendChild(jokerGrid);
 
-  // 6. Button: Cancel
+  // 6. Przycisk: Anuluj (NA DOLE)
   const btnCancel = document.createElement('button');
   btnCancel.className = 'btn-joker-no';
   btnCancel.style.marginTop = "20px";
