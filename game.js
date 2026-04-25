@@ -16,8 +16,8 @@ let undoStack = [];
 let currentGameNumber = 0;
 
 // SUPABASE
-const SUPABASE_URL = 'https://ucxluytjmrbopiwvqpgl.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_Yd4-7tGatl3FvmG1Y6C9Nw_Yj_nHs3C';
+const SUPABASE_URL = 'https://kcooghfinquxlefeykhq.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_HqdlLvjF4_527ZS7gBi5Ng_jLkPdOfG';
 
 let supabaseClient = null;
 
